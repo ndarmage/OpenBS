@@ -185,6 +185,7 @@ def compute_flx_derivatives(N, evol_names, Nnot, flx_argvs, eps=1.e-3):
     concentration and it is given as a relative quantity. Nnot contains the
     concentrations of the nuclides that do not evolve in time."""
     mxslib, p, P, B2eigv = flx_argvs  # unpack
+    microxs, NG, AO = mxslib
     if B2eigv:
         raise ValueError("B2eigv is not supported yet!")
 
@@ -388,6 +389,7 @@ def dM_dNj_dot_N(N, evol_names=None, NArNot=None, nucl_chain=None,
     # setup the right hand side of the Bateman system equations
     f = np.zeros((len(N)),)
     for i, n in enumerate(evol_names):
+        nuclide = nuclides[n]
         if 'Absorption' in microxs[n]:
             # nuclides without absorption with CEAV6: He3, He4 and H3
             mRRate = np.dot(np.nan_to_num(microxs[n]['Absorption'][p]), djflx)
@@ -468,15 +470,15 @@ if __name__ == "__main__":
     # retrieve the cross sections prepared by ap3
     sys.path.append('include/')
     from analyse_NData import readMPO
-    xsdir = "lib/"
+    xsdir = "lib"
     MPOh5 = "UO2_325_AFA3G17_idt_2G_noB2.hdf"
     # xsdir = "/data/tmplca/dtomatis/ReducedDeplChains/pwruo2_fc_281gxs/"
     # MPOh5 = "UO2_325_AFA3G17_idt_281G.hdf"
-    xslib = readMPO(xsdir + MPOh5, vrbs=True, load=False, check=True,
-                    save=False)
+    xslib = readMPO(os.path.join(xsdir, MPOh5), vrbs=True, load=False,
+                    check=True, save=False)
     lg.info("Data correctly retrieved from the MPO " + MPOh5)
     lg.info(' -o-'*16)
-    sys.exit("END of TEST")
+    # sys.exit("END of TEST")
 
     homogenized_zone = 0  # there is only a single zone of homogenization
     microxs = xslib['microlib'][homogenized_zone]
@@ -583,14 +585,14 @@ if __name__ == "__main__":
     # -------------------------------------------------------------------------
     # -----------------set the calculation and its options---------------------
     # -------------------------------------------------------------------------
-    calculate_reference_N = False  # load from existing file if False
-    calculate_flux_and_derivatives = False  # load from existing file if False
+    calculate_reference_N = True  # load from existing file if False
+    calculate_flux_and_derivatives = True  # load from existing file if False
     calculate_CF = True
     use_el_as_final_condition = True
-    test_dir = 'tests/'  # directory storing the reference solutions
+    test_dir = 'tests'  # directory storing the reference solutions
     # ofile += "RefSteadySolution.p"
-    Nfile = test_dir + "Ref25pcPowerSolution.p"
-    Ffile = test_dir + "Ref25pcFlxDerivatives.p"
+    Nfile = os.path.join(test_dir, "Ref25pcPowerSolution.p")
+    Ffile = os.path.join(test_dir, "Ref25pcFlxDerivatives.p")
     # -------------------------------------------------------------------------
 
     lg.info(' -o-'*16)
@@ -598,9 +600,11 @@ if __name__ == "__main__":
     if calculate_reference_N:
         lg.info("Calculate the reference solution by resolving the non-linear")
         lg.info("Bateman equations.")
-        # define the time mesh
-        tbeg, tend, Deltat_min = 0., 3.6e+3 * 24 * 4, 5.
-        tmesh = np.linspace(tbeg, tend, (tend - tbeg) / (Deltat_min * 60.) + 1)
+        # define the time mesh (seconds)
+        tbeg, tend = 0., 3.6e+3 * 24 * 4
+        Deltat_min = 5.
+        I = int((tend - tbeg) / (Deltat_min * 60.))
+        tmesh = np.linspace(tbeg, tend, I + 1)
 
         def dN_dt_wrapped(t, N):
             return dN_dt(N, t, NArNot=N0not, P=PWcm_xslib, mxslib=microxst,
@@ -616,14 +620,14 @@ if __name__ == "__main__":
 
         lg.info("Save ODE solution to file " + Nfile)
         with open(Nfile, "wb") as f:
-            pickle.dump(Nsol, f)
+            pickle.dump(Nsol, f, protocol=pickle.HIGHEST_PROTOCOL)
     else:
         lg.info("Retrieve the reference solution from previous calculation")
         lg.info("Ref. solution from file " + Nfile)
         with open(Nfile, "rb") as f:
             Nsol = pickle.load(f)
         tmesh = Nsol.t
-        tbeg, tend, I = tmesh[0], tmesh[-1], tmesh.size-1
+        tbeg, tend, I = tmesh[0], tmesh[-1], tmesh.size - 1
     lg.info(' -o-'*16)
 
 
@@ -660,8 +664,11 @@ if __name__ == "__main__":
                                            flx_argvs, eps=1.e-2)
 
         pool = multiprocessing.Pool(NB_CORES)
-        pool_results = pool.map(compute_derivs_at_i,
-                                [Ni for Ni in Nsol.y[:,:I+1].T])
+        # pool_results = pool.map(compute_derivs_at_i,
+                                # [Ni for Ni in Nsol.y[:,:I+1].T])
+        pool_results = pool.starmap(compute_flx_derivatives,
+            [(Ni, evol_names, N0not, flx_argvs, 1.e-2)
+             for Ni in Nsol.y[:,:I+1].T])
         pool.close()
         pool.join()
         kt = np.array([res[0] for res in pool_results])
@@ -743,7 +750,9 @@ if __name__ == "__main__":
             # within the scope of the pool
             pool = multiprocessing.Pool(NB_CORES)
             dM_dN_dot_Ni = np.column_stack(
-                pool.map(dM_dNj_dot_Ni, [dflxi_dN[j,:] for j in range(nb_N)])
+                # pool.map(dM_dNj_dot_Ni, [dflxi_dN[j,:] for j in range(nb_N)])
+                pool.starmap(dM_dNj_dot_N, [(Ni, evol_names, N0not, chain_data,
+                          microxst, dflxi_dN[j,:] / Vcm2) for j in range(nb_N)])
             )
             pool.close()
             pool.join()
