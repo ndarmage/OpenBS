@@ -351,7 +351,7 @@ def dN_dt(N, t, p=None, P=0., V=0., NArNot=None, nucl_chain=None, mxslib=None,
 
 import sys
 
-def dM_dNj_dot_N(N,p=None, evol_names=None, NArNot=None, nucl_chain=None,
+def dM_dNj_dot_N(N,p=None, evol_names=None, NArNot=None, nucl_chain=None,              #another variable p has been added inside the definition of function dM_dNj_dot_N
                  mxslib=None, djflx=None):
     """Calculate the scalar product between the derivative of the evolution
     matrix M on the j-th nuclide concentration in N and N itself. This follows
@@ -401,7 +401,7 @@ def dM_dNj_dot_N(N,p=None, evol_names=None, NArNot=None, nucl_chain=None,
     # setup the right hand side of the Bateman system equations
     f = np.zeros((len(N)),)
     for i, n in enumerate(evol_names):
-        nuclide=nuclides[n]                    #verify and check condition of vector p to function dM_dN
+        nuclide=nuclides[n]                    #verify and check condition of vector p to function dM_dN (this has been verified)
         if 'Absorption' in microxs[n]:
             # nuclides without absorption with CEAV6: He3, He4 and H3
             mRRate = np.dot(np.nan_to_num(microxs[n]['Absorption'][p]), djflx)
@@ -677,7 +677,7 @@ if __name__ == "__main__":
         pool = multiprocessing.Pool(NB_CORES)
         pool_results =pool.starmap(compute_flx_derivatives,
                                 [(Ni, evol_names, N0not,flx_argvs,1.e-2) for Ni in Nsol.y[:,:tmesh.size-1+1].T])
-        # pool.map(compute_derivs_at_i,[Ni for Ni in Nsol.y[:,:I+1].T])
+        # pool.map(compute_derivs_at_i,[Ni for Ni in Nsol.y[:,:I+1].T]) was substitued with the latter starmap 
         pool.close()
         pool.join()
         kt = np.array([res[0] for res in pool_results])
@@ -759,7 +759,7 @@ if __name__ == "__main__":
             # within the scope of the pool
             pool = multiprocessing.Pool(NB_CORES)
             dM_dN_dot_Ni = np.column_stack(pool.starmap(dM_dNj_dot_N ,[(Ni,p,evol_names, N0not, chain_data,microxst,(dflxi_dN[j,:]/ Vcm2)) for j in range(nb_N)]))
-                #pool.map(dM_dNj_dot_Ni, [dflxi_dN[j,:] for j in range(nb_N)]))
+                #pool.map(dM_dNj_dot_Ni, [dflxi_dN[j,:] for j in range(nb_N)])) was subituted with the latter one (starmap)
 
             pool.close()
             pool.join()
