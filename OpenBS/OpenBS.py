@@ -198,15 +198,23 @@ def compute_flx_derivatives(N, evol_names, Nnot, flx_argvs, eps=1.e-3):
     dflx_dN = np.zeros((nb_evolving_nuclides, NG),)
     Delta_N = N * eps
     eps = 1.0 + eps
+    # attempt to get faster calc
+    Ns_copy = np.tile(N, (nb_evolving_nuclides, 1)).T
+    Ns_copy[np.arange(nb_evolving_nuclides), \
+            np.arange(nb_evolving_nuclides)] *= eps  # !only main diag!
     for j in range(nb_evolving_nuclides):
-        N_copy = np.array(N, copy=True)
-        N_copy[j] *= eps
+        # starttt = time.time()
+        # N_copy = np.array(N, copy=True)
+        # N_copy[j] *= eps
         # get the DataArray
-        NArAll = build_N_DataArray(N_copy, evol_names, Nnot)
+        # NArAll = build_N_DataArray(N_copy, evol_names, Nnot)
+        NArAll = build_N_DataArray(Ns_copy[j,:], evol_names, Nnot)
         k, flx = compute_flux(NArAll, *flx_argvs, vrbs=False)
-
-        drho_dN[j] = (1. / k0 - 1. / k) / Delta_N[j]
-        dflx_dN[j,:] = (flx - flx0) / Delta_N[j]
+ 
+        invDNj = 1. / Delta_N[j]
+        drho_dN[j] = (1. / k0 - 1. / k) * invDNj
+        dflx_dN[j, :] = (flx - flx0) * invDNj
+        # print('etime is ' + str(time.time() - starttt))
     return k0, flx0, drho_dN, dflx_dN
 
 
@@ -347,8 +355,8 @@ def dN_dt(N, t, p=None, P=0., V=0., NArNot=None, nucl_chain=None, mxslib=None,
     return f
 
 
-def dM_dNj_dot_N(N, evol_names=None, NArNot=None, nucl_chain=None,
-                 mxslib=None, djflx=None):
+def dM_dNj_dot_N(N, p, evol_names=None, NArNot=None,
+                 nucl_chain=None, mxslib=None, djflx=None):
     """Calculate the scalar product between the derivative of the evolution
     matrix M on the j-th nuclide concentration in N and N itself. This follows
     from calculating the \Delta M term in the perturbation ODEs, for
@@ -638,24 +646,26 @@ if __name__ == "__main__":
 
         flx_argvs = microxst, p, PWcm_xslib, HB1LM
 
-        # # serial calculation
-        # flxt, kt = np.zeros((NG,I+1),), np.zeros((I+1),)
-        # drho_dN = np.zeros((nb_evolving_nuclides,I+1),)
-        # dflx_dN = np.zeros((nb_evolving_nuclides,NG,I+1),)
-        # for i, Ni in enumerate(Nsol.y[:,:I+1].T):
-        #     kt[i], flxt[:,i], drho_dN[:,i], dflx_dN[:,:,i] = \
-        #         compute_flx_derivatives(Ni, evol_names, N0not, flx_argvs,
-        #                                 eps=1.e-2)
-        # lg.info("Elapsed time for the derivatives (s): %13.6g" %
-        #     (time.time() - t_beg))
-        #
-        # # copy the arrays to verify the parallel calculation below
-        # k0, flxt0, drho_dN0, dflx_dN0 = np.array(kt[:I+1], copy=True), \
-        #                                 np.array(flxt[:,:I+1], copy=True), \
-        #                                 np.array(drho_dN[:,:I+1], copy=True),  \
-        #                                 np.array(dflx_dN[:,:,:I+1], copy=True)
-        # t_beg = time.time()  # restart the counter
+        # serial calculation
+        flxt, kt = np.zeros((NG,I+1),), np.zeros((I+1),)
+        drho_dN = np.zeros((nb_evolving_nuclides,I+1),)
+        dflx_dN = np.zeros((nb_evolving_nuclides,NG,I+1),)
+        for i, Ni in enumerate(Nsol.y[:,:I+1].T):
+            kt[i], flxt[:,i], drho_dN[:,i], dflx_dN[:,:,i] = \
+                compute_flx_derivatives(Ni, evol_names, N0not, flx_argvs,
+                                        eps=1.e-2)
+            print(time.time() - t_beg); t_beg = time.time()
+        lg.info("Elapsed time for the derivatives (s): %13.6g" %
+            (time.time() - t_beg))
+        
+        # copy the arrays to verify the parallel calculation below
+        k0, flxt0, drho_dN0, dflx_dN0 = np.array(kt[:I+1], copy=True), \
+                                        np.array(flxt[:,:I+1], copy=True), \
+                                        np.array(drho_dN[:,:I+1], copy=True),  \
+                                        np.array(dflx_dN[:,:,:I+1], copy=True)
+        t_beg = time.time()  # restart the counter
 
+        sys.exit('azzz')
         def compute_derivs_at_i(Ni):
             # compute the k-eigenvalue, the flux and the derivatives at the
             # beginning of the i-th time step with Ni
@@ -732,7 +742,7 @@ if __name__ == "__main__":
                 #              mxslib=microxst, nucl_chain=chain_data,
                 #              p=p, V=Vcm2, evol_names=evol_names,
                 #              adjoint=False, flx=dflx)
-                return dM_dNj_dot_N(Ni, evol_names, N0not, chain_data,
+                return dM_dNj_dot_N(Ni, p, evol_names, N0not, chain_data,
                                     microxst, djflx=(dflx / Vcm2))
 
             t_beg = time.time()
@@ -751,7 +761,7 @@ if __name__ == "__main__":
             pool = multiprocessing.Pool(NB_CORES)
             dM_dN_dot_Ni = np.column_stack(
                 # pool.map(dM_dNj_dot_Ni, [dflxi_dN[j,:] for j in range(nb_N)])
-                pool.starmap(dM_dNj_dot_N, [(Ni, evol_names, N0not, chain_data,
+                pool.starmap(dM_dNj_dot_N, [(Ni, p, evol_names, N0not, chain_data,
                           microxst, dflxi_dN[j,:] / Vcm2) for j in range(nb_N)])
             )
             pool.close()
