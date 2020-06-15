@@ -28,9 +28,21 @@ References
 2. Hébert A., Applied reactor physics. Presses Inter. Polytechnique (2009).
 """
 import os
+def omp_settings(n):
+    "set env vars for OpenMP multi-threading (!before numpy import!)"
+    os.environ["OMP_NUM_THREADS"] = str(n)
+    os.environ["OPENBLAS_NUM_THREADS"] = str(n)
+    os.environ["MKL_NUM_THREADS"] = str(n)
+    os.environ["VECLIB_MAXIMUM_THREADS"] = str(n)
+    os.environ["NUMEXPR_NUM_THREADS"] = str(n)
+
 import sys
-import time
 import logging as lg
+import time
+import multiprocessing
+NB_CORES = min(multiprocessing.cpu_count() - 1, 24)  # may fail on ARM arch.
+# omp_settings(NB_CORES)  # no significant improvement noticed
+
 import numpy as np
 import xarray as xr
 import scipy.integrate as ni
@@ -42,12 +54,10 @@ from HomogB1FlxCalc import *
 # import the tools to load the nuclide chain
 from chaintools import *
 
-import multiprocessing
-
 __title__ = "OpenBS"
-__author__ = "D. Tomatis, Y. Wang"
+__author__ = "D. Tomatis"
 __date__ = "26/03/2019"
-__version__ = "1.5.0"
+__version__ = "1.6.0"
 
 logfile = os.path.splitext(os.path.basename(__file__))[0] + '.log'
 lg.basicConfig(level=lg.INFO)  # filename = logfile
@@ -55,8 +65,6 @@ lg.basicConfig(level=lg.INFO)  # filename = logfile
 MeV2J = eV2J * 1.e+6  # MeV to J conversion constant
 barn2cm2 = 1.e-24  # barn to cm2 conversion constant
 ThEnCut = 0.625  # thermal energy cut in eV
-
-NB_CORES = min(multiprocessing.cpu_count() - 1, 24)  # may fail on ARM arch.
 
 
 def list_sum(l1, l2):
@@ -218,8 +226,8 @@ def compute_flx_derivatives(N, evol_names, Nnot, flx_argvs, eps=1.e-3):
     return k0, flx0, drho_dN, dflx_dN
 
 
-def dN_dt(N, t, p=None, P=0., V=0., NArNot=None, nucl_chain=None, mxslib=None,
-          evol_names=None, flx=None, adjoint=False):
+def dN_dt(N, t, p=None, P=0., V=0., NArNot=None, nucl_chain=None,
+          mxslib=None, evol_names=None, flx=None, adjoint=False):
     """Determine the change rates of the nuclides present in the array N at
     time t, that is setup the product between the evolution matrix and the
     same vector N as in the system of the Bateman equations. The neutron flux
@@ -496,7 +504,7 @@ if __name__ == "__main__":
     microxst = microxs, NG, AO  # a packed tuple used later
 
     # Calculate the projection matrix for different En. bounds between
-    # fission yields and the neutron mutligroup flux
+    # fission yields and the neutron multigroup flux
     EnMesh_MPO = [xslib[key] for key in [*xslib] if ("EnMesh_" in key)]
     EnMeshFlx_MPO = [xslib[key] for key in [*xslib] if ("EnMesh_" in key) and
                      not ("xslib_MIC" in key)][0]
@@ -593,10 +601,10 @@ if __name__ == "__main__":
     # -------------------------------------------------------------------------
     # -----------------set the calculation and its options---------------------
     # -------------------------------------------------------------------------
-    calculate_reference_N = True  # load from existing file if False
-    calculate_flux_and_derivatives = True  # load from existing file if False
+    calculate_reference_N = False  # load from existing file if False
+    calculate_flux_and_derivatives = False  # load from existing file if False
     calculate_CF = True
-    use_el_as_final_condition = True
+    use_el_as_final_condition = False # at the end of each time step!
     test_dir = 'tests'  # directory storing the reference solutions
     # ofile += "RefSteadySolution.p"
     Nfile = os.path.join(test_dir, "Ref25pcPowerSolution.p")
@@ -609,9 +617,9 @@ if __name__ == "__main__":
         lg.info("Calculate the reference solution by resolving the non-linear")
         lg.info("Bateman equations.")
         # define the time mesh (seconds)
-        tbeg, tend = 0., 3.6e+3 * 24 * 4
-        Deltat_min = 5.
-        I = int((tend - tbeg) / (Deltat_min * 60.))
+        tbeg, tend = 0., 3.6e+3 * 24 * 4  # up to four days
+        Deltat_t = 5. * 60.  # time step in sec
+        I = int((tend - tbeg) / Deltat_t)  # nb. of times steps
         tmesh = np.linspace(tbeg, tend, I + 1)
 
         def dN_dt_wrapped(t, N):
@@ -665,7 +673,6 @@ if __name__ == "__main__":
                                         np.array(dflx_dN[:,:,:I+1], copy=True)
         t_beg = time.time()  # restart the counter
 
-        sys.exit('azzz')
         def compute_derivs_at_i(Ni):
             # compute the k-eigenvalue, the flux and the derivatives at the
             # beginning of the i-th time step with Ni
@@ -725,7 +732,8 @@ if __name__ == "__main__":
 
             # locate the i-th time step
             ti, tip1 = tmesh[i], tmesh[i+1]
-            Dt, tbnd = tip1 - ti, [ti, tip1]
+            Dt = tip1 - ti
+            tbnd = [0, Dt]  # [ti, tip1]
 
             # get the concentrations at the beginning and at the end of the
             # given time step
@@ -747,13 +755,13 @@ if __name__ == "__main__":
 
             t_beg = time.time()
             # calculate the Delta M term due to flux change
-            # # serial calculation
-            # dM_dN_dot_Ni = np.zeros((nb_N, nb_N),)
-            # for j in range(nb_evolving_nuclides):
-            #     dM_dN_dot_Ni[:,j] = dM_dNj_dot_Ni(dflxi_dN[j,:])
-            # cc = np.array(dM_dN_dot_Ni, copy=True)  # for testing
-            # lg.info("Elapsed time for the matrix (s): %13.6g" %
-            #     (time.time() - t_beg)); t_beg = time.time()
+            # serial calculation
+            dM_dN_dot_Ni = np.zeros((nb_N, nb_N),)
+            for j in range(nb_evolving_nuclides):
+                dM_dN_dot_Ni[:,j] = dM_dNj_dot_Ni(dflxi_dN[j,:])
+            cc = np.array(dM_dN_dot_Ni, copy=True)  # for testing
+            lg.info("Elapsed time for the matrix (s): %13.6g" %
+                (time.time() - t_beg)); t_beg = time.time()
 
             # alternative parallel computation
             # remind that the function called by multiprocessing pool must be
@@ -771,6 +779,7 @@ if __name__ == "__main__":
             t_beg = time.time()
             # print('Matrices are equal? ',
             #       np.sum(np.isclose(cc, dM_dN_dot_Ni)) == nb_N*nb_N)
+            sys.exit('fermati!!!')
 
             # redefine dNa_dt for having a new flxi
             def dNa_dt_wrapped(t, N):
@@ -778,46 +787,61 @@ if __name__ == "__main__":
                              nucl_chain=chain_data, p=p, V=Vcm2,
                              evol_names=evol_names, adjoint=True, flx=flxi)
 
-            # def compute_lth_adj_funcs(nuc, Na_hat_lip1):
-            for l, nuc in enumerate(evol_names):
-                tt_beg = time.time()
-                npos = evol_names == nuc
-                if use_el_as_final_condition or (i == I - 1):
+            for l in range(nb_evolving_nuclides):
+                # tt_beg = time.time()
+                if use_el_as_final_condition:
                     wf = np.zeros(nb_evolving_nuclides)
-                    wf[npos] = 1.
+                    wf[l] = 1.
                 else:
                     wf = Na_hat[l,:,i+1]  # Na_hat_lip1
 
                 # solve the adjoint problem (which is backwards in time)
                 # explicit Runge-Kutta of order 4(5), RK45 is default method
                 Nasol = ni.solve_ivp(dNa_dt_wrapped, tbnd, wf, t_eval=tbnd)
-                stat, err_msg = Nasol.status, Nasol.message
-                if stat != 0:
-                    raise RuntimeError(str(stat) + ": " + err_msg)
-
+                if Nasol.status != 0:
+                    raise RuntimeError(str(Nasol.status) + ": " +
+                                       Nasol.message)
                 # flip the solution in time to take into account the negative
                 # derivative of the adjoint problem
-                Nasol.t = np.flip(Nasol.t)
-                Na[l,:,i] = Nasol.y[:,-1]
-                # Nali = Nasol.y[:,-1]
+                # Nasol.t = tip1 - Nasol.t  # commented to save time
+                Na[l,:,i] = Nasol.y[:,-1]  # Nali
 
-                # compute N adjoint hat
+                # compute N adjoint hat (Na_hatli)
                 Na_hat[l,:,i] = Na[l,:,i] + np.dot(Na[l,:,i], dM_dN_dot_Ni)
-                # Na_hatli = Nali + np.dot(Nali, dM_dN_dot_Ni)
                 # np.fill_diagonal(Na_dot_dM_dNj_dot_Ni,
                 #                  1 + Na_dot_dM_dNj_dot_Ni.diagonal())
 
                 # compute the contribution function for the nuclide at npos
-                CF[l,:,i] = Na_hat[l,:,i] * Ni / Nsol.y[npos,-1]
-                # CFli = Na_hatli * Ni / Nsol.y[npos,-1]
+                CF[l,:,i] = Na_hat[l,:,i] * Ni / Nsol.y[l,-1]
 
-                lg.info("Elapsed time to the l-th hat adjoint (s): %13.6g" %
-                    (time.time() - tt_beg))
-                # return Nali, Na_hatli, CFli
+                # lg.info("Elapsed time to the l-th hat adjoint (s): %13.6g" %
+                    # (time.time() - tt_beg))
 
-            # for l, nuc in enumerate(evol_names):
+            def compute_lth_adj_funcs(l, Na_hat_lip1):
+                if use_el_as_final_condition:
+                    wf = np.zeros(nb_evolving_nuclides)
+                    wf[l] = 1.
+                else:
+                    wf = Na_hat_lip1[l,:]  # Na_hat[l,:,i+1]
+
+                # solve the adjoint problem (which is backwards in time)
+                # explicit Runge-Kutta of order 4(5), RK45 is default method
+                Nasol = ni.solve_ivp(dNa_dt_wrapped, tbnd, wf, t_eval=tbnd)
+                if Nasol.status != 0:
+                    raise RuntimeError(str(Nasol.status) + ": " +
+                                       Nasol.message)
+                Nali = Nasol.y[:,-1]  # = Na[l,:,i]
+                # compute N adjoint hat
+                # Na_hat[l,:,i] = Na[l,:,i] + np.dot(Na[l,:,i], dM_dN_dot_Ni)
+                Na_hatli = Nali + np.dot(Nali, dM_dN_dot_Ni)
+                # compute the contribution function for the nuclide at npos
+                # CF[l,:,i] = Na_hat[l,:,i] * Ni / Nsol.y[l,-1]
+                CFli = Na_hatli * Ni / Nsol.y[l,-1]
+                return Nali, Na_hatli, CFli
+
+            # for l in range(range(nb_evolving_nuclides)):
             #     Na[l,:,i], Na_hat[l,:,i], CF[l,:,i] = \
-            #         compute_lth_adj_funcs(nuc, Na_hat[l,:,i+1])
+            #         compute_lth_adj_funcs(l, Na_hat[l,:,i+1])
 
             lg.info("Elapsed time in the loop for adjoint funcs (s): %13.6g" %
                 (time.time() - t_beg))
