@@ -43,6 +43,8 @@ import multiprocessing
 NB_CORES = min(multiprocessing.cpu_count() - 1, 24)  # may fail on ARM arch.
 # omp_settings(NB_CORES)  # no significant improvement noticed
 
+posix = os.name == "posix"
+
 import numpy as np
 import xarray as xr
 import scipy.integrate as ni
@@ -662,7 +664,7 @@ if __name__ == "__main__":
             kt[i], flxt[:,i], drho_dN[:,i], dflx_dN[:,:,i] = \
                 compute_flx_derivatives(Ni, evol_names, N0not, flx_argvs,
                                         eps=1.e-2)
-            print(time.time() - t_beg); t_beg = time.time()
+            # print(time.time() - t_beg); t_beg = time.time()
         lg.info("Elapsed time for the derivatives (s): %13.6g" %
             (time.time() - t_beg))
         
@@ -674,18 +676,20 @@ if __name__ == "__main__":
         t_beg = time.time()  # restart the counter
 
         def compute_derivs_at_i(Ni):
-            # compute the k-eigenvalue, the flux and the derivatives at the
-            # beginning of the i-th time step with Ni
+            # compute the k-eigenvalue, the flux and the derivatives
+            # at the beginning of the i-th time step with Ni
             # return ki, flxi, drho_dNi, dflx_dNi
             return compute_flx_derivatives(Ni, evol_names, N0not,
                                            flx_argvs, eps=1.e-2)
 
         pool = multiprocessing.Pool(NB_CORES)
-        # pool_results = pool.map(compute_derivs_at_i,
-                                # [Ni for Ni in Nsol.y[:,:I+1].T])
-        pool_results = pool.starmap(compute_flx_derivatives,
-            [(Ni, evol_names, N0not, flx_argvs, 1.e-2)
-             for Ni in Nsol.y[:,:I+1].T])
+        if posix:  # fork processes
+            pool_results = pool.map(compute_derivs_at_i,
+                                    [Ni for Ni in Nsol.y[:,:I+1].T])
+        else:  # spawn processes
+            pool_results = pool.starmap(compute_flx_derivatives,
+                [(Ni, evol_names, N0not, flx_argvs, 1.e-2)
+                 for Ni in Nsol.y[:,:I+1].T])
         pool.close()
         pool.join()
         kt = np.array([res[0] for res in pool_results])
@@ -755,32 +759,39 @@ if __name__ == "__main__":
 
             t_beg = time.time()
             # calculate the Delta M term due to flux change
-            # serial calculation
-            dM_dN_dot_Ni = np.zeros((nb_N, nb_N),)
-            for j in range(nb_evolving_nuclides):
-                dM_dN_dot_Ni[:,j] = dM_dNj_dot_Ni(dflxi_dN[j,:])
-            cc = np.array(dM_dN_dot_Ni, copy=True)  # for testing
-            lg.info("Elapsed time for the matrix (s): %13.6g" %
-                (time.time() - t_beg)); t_beg = time.time()
-
-            # alternative parallel computation
-            # remind that the function called by multiprocessing pool must be
-            # within the scope of the pool
-            pool = multiprocessing.Pool(NB_CORES)
-            dM_dN_dot_Ni = np.column_stack(
-                # pool.map(dM_dNj_dot_Ni, [dflxi_dN[j,:] for j in range(nb_N)])
-                pool.starmap(dM_dNj_dot_N, [(Ni, p, evol_names, N0not, chain_data,
-                          microxst, dflxi_dN[j,:] / Vcm2) for j in range(nb_N)])
-            )
-            pool.close()
-            pool.join()
+            if not posix:  # ...spawning processes on windows takes too
+                           # long for copying the input args to all child
+                           # processes
+                # serial calculation
+                dM_dN_dot_Ni = np.zeros((nb_N, nb_N),)
+                for j in range(nb_evolving_nuclides):
+                    dM_dN_dot_Ni[:,j] = dM_dNj_dot_Ni(dflxi_dN[j,:])
+                # cc = np.array(dM_dN_dot_Ni, copy=True)  # for testing
+                # lg.info("Elapsed time for the matrix (s): %13.6g" %
+                    # (time.time() - t_beg)); t_beg = time.time()
+            else:
+                # alternative parallel computation
+                # remind that the function called by multiprocessing pool
+                # must be within the scope of the pool
+                pool = multiprocessing.Pool(NB_CORES)
+                dM_dN_dot_Ni = np.column_stack(
+                    pool.map(dM_dNj_dot_Ni,
+                             [dflxi_dN[j,:] for j in range(nb_N)])
+                    # pool.starmap(dM_dNj_dot_N,
+                                 # [(Ni, p, evol_names, N0not, chain_data,
+                                   # microxst, dflxi_dN[j,:] / Vcm2)
+                                                  # for j in range(nb_N)],
+                                             # chunksize=nb_N // NB_CORES)
+                               )
+                pool.close()
+                pool.join()
             lg.info("Elapsed time for the matrix (s): %13.6g" %
                 (time.time() - t_beg))
-            t_beg = time.time()
             # print('Matrices are equal? ',
             #       np.sum(np.isclose(cc, dM_dN_dot_Ni)) == nb_N*nb_N)
             sys.exit('fermati!!!')
 
+            t_beg = time.time()
             # redefine dNa_dt for having a new flxi
             def dNa_dt_wrapped(t, N):
                 return dN_dt(N, t, NArNot=N0not, P=PWcm_xslib, mxslib=microxst,
