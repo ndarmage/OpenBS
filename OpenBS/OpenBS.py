@@ -462,19 +462,11 @@ def dM_dNj_dot_N(N, p, evol_names=None, NArNot=None,
 
 
 def compute_lth_adj_funcs(l, Na_hat_lip1, dNa_dt_wrapped, tbnd,
-<<<<<<< HEAD
                           use_el_as_final_condition=False):
     """Internal service for the calculation of the adj. funcs at a
     given time step."""
     nb_evolving_nuclides = Na_hat_lip1.shape[1]
-    if use_el_as_final_conditions:
-=======
-                          final_el_all=use_el_as_final_condition):
-    """Internal service for the calculation of the adj. funcs at a
-    given time step."""
-    nb_evolving_nuclides = Na_hat_lip1.shape[1]
-    if final_el_all:
->>>>>>> d70d0cfd8901177209249cc61b9e60977baf0fd4
+    if use_el_as_final_condition:
         wf = np.zeros(nb_evolving_nuclides)
         wf[l] = 1.
     else:
