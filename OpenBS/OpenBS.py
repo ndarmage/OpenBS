@@ -462,11 +462,11 @@ def dM_dNj_dot_N(N, p, evol_names=None, NArNot=None,
 
 
 def compute_lth_adj_funcs(l, Na_hat_lip1, dNa_dt_wrapped, tbnd,
-                          final_el_all=use_el_as_final_condition):
+                          use_el_as_final_condition=False):
     """Internal service for the calculation of the adj. funcs at a
     given time step."""
     nb_evolving_nuclides = Na_hat_lip1.shape[1]
-    if final_el_all:
+    if use_el_as_final_conditions:
         wf = np.zeros(nb_evolving_nuclides)
         wf[l] = 1.
     else:
@@ -857,25 +857,27 @@ if __name__ == "__main__":
             lg.info("Elapsed time in the loop for adjoint funcs (s): %13.6g" %
                 (time.time() - t_beg)); t_beg = time.time()
 
-            for l in range(nb_evolving_nuclides):
-                Na[l,:,i], Na_hat[l,:,i], CF[l,:,i] = \
-                    compute_lth_adj_funcs(l, Na_hat[:,:,i+1],
-                                          dNa_dt_wrapped, tbnd)
+            # for l in range(nb_evolving_nuclides):
+                # Na[l,:,i], Na_hat[l,:,i], CF[l,:,i] = \
+                    # compute_lth_adj_funcs(l, Na_hat[:,:,i+1], dNa_dt_wrapped,
+                                          # tbnd, use_el_as_final_condition)
 
-            lg.info("Elapsed time in the loop for adjoint funcs (s): %13.6g" %
-                (time.time() - t_beg)); t_beg = time.time()
+            # lg.info("Elapsed time in the loop for adjoint funcs (s): %13.6g" %
+                # (time.time() - t_beg)); t_beg = time.time()
 
 
             pool = multiprocessing.Pool(NB_CORES)
-            Na[:,:,i], Na_hat[:,:,i], CF[:,:,i] = map(np.vstack,
-                pool.starmap(compute_lth_adj_funcs,
+            res = pool.starmap(compute_lth_adj_funcs,
                     [(l, Na_hat[:,:,i+1], dNa_dt_wrapped, tbnd,
                                      use_el_as_final_condition)
                         for l in range(nb_evolving_nuclides)])
-                        )
+            print(res)
+            print(res.shape)
+            print(res.size)
+            Na[:,:,i], Na_hat[:,:,i], CF[:,:,i] = map(np.vstack, res)
             pool.close()
             pool.join()
 
             lg.info("Elapsed time in the loop for adjoint funcs (s): %13.6g" %
                 (time.time() - t_beg))
-            input(i)
+            input(i) 
