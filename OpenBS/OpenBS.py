@@ -461,6 +461,33 @@ def dM_dNj_dot_N(N, p, evol_names=None, NArNot=None,
     return f
 
 
+def compute_lth_adj_funcs(l, Na_hat_lip1, dNa_dt_wrapped, tbnd,
+                          final_el_all=use_el_as_final_condition):
+    """Internal service for the calculation of the adj. funcs at a
+    given time step."""
+    nb_evolving_nuclides = Na_hat_lip1.shape[1]
+    if final_el_all:
+        wf = np.zeros(nb_evolving_nuclides)
+        wf[l] = 1.
+    else:
+        wf = Na_hat_lip1[l,:]  # Na_hat[l,:,i+1]
+
+    # solve the adjoint problem (which is backwards in time)
+    # explicit Runge-Kutta of order 4(5), RK45 is default method
+    Nasol = ni.solve_ivp(dNa_dt_wrapped, tbnd, wf, t_eval=tbnd)
+    if Nasol.status != 0:
+        raise RuntimeError(str(Nasol.status) + ": " +
+                           Nasol.message)
+    Nali = Nasol.y[:,-1]  # = Na[l,:,i]
+    # compute N adjoint hat
+    # Na_hat[l,:,i] = Na[l,:,i] + np.dot(Na[l,:,i], dM_dN_dot_Ni)
+    Na_hatli = Nali + np.dot(Nali, dM_dN_dot_Ni)
+    # compute the contribution function for the nuclide at npos
+    # CF[l,:,i] = Na_hat[l,:,i] * Ni / Nsol.y[l,-1]
+    CFli = Na_hatli * Ni / Nsol.y[l,-1]
+    return Nali, Na_hatli, CFli
+
+
 if __name__ == "__main__":
 
     # read the nuclide chain
@@ -789,7 +816,6 @@ if __name__ == "__main__":
                 (time.time() - t_beg))
             # print('Matrices are equal? ',
             #       np.sum(np.isclose(cc, dM_dN_dot_Ni)) == nb_N*nb_N)
-            sys.exit('fermati!!!')
 
             t_beg = time.time()
             # redefine dNa_dt for having a new flxi
@@ -828,31 +854,27 @@ if __name__ == "__main__":
                 # lg.info("Elapsed time to the l-th hat adjoint (s): %13.6g" %
                     # (time.time() - tt_beg))
 
-            def compute_lth_adj_funcs(l, Na_hat_lip1):
-                if use_el_as_final_condition:
-                    wf = np.zeros(nb_evolving_nuclides)
-                    wf[l] = 1.
-                else:
-                    wf = Na_hat_lip1[l,:]  # Na_hat[l,:,i+1]
+            lg.info("Elapsed time in the loop for adjoint funcs (s): %13.6g" %
+                (time.time() - t_beg)); t_beg = time.time()
 
-                # solve the adjoint problem (which is backwards in time)
-                # explicit Runge-Kutta of order 4(5), RK45 is default method
-                Nasol = ni.solve_ivp(dNa_dt_wrapped, tbnd, wf, t_eval=tbnd)
-                if Nasol.status != 0:
-                    raise RuntimeError(str(Nasol.status) + ": " +
-                                       Nasol.message)
-                Nali = Nasol.y[:,-1]  # = Na[l,:,i]
-                # compute N adjoint hat
-                # Na_hat[l,:,i] = Na[l,:,i] + np.dot(Na[l,:,i], dM_dN_dot_Ni)
-                Na_hatli = Nali + np.dot(Nali, dM_dN_dot_Ni)
-                # compute the contribution function for the nuclide at npos
-                # CF[l,:,i] = Na_hat[l,:,i] * Ni / Nsol.y[l,-1]
-                CFli = Na_hatli * Ni / Nsol.y[l,-1]
-                return Nali, Na_hatli, CFli
+            for l in range(nb_evolving_nuclides):
+                Na[l,:,i], Na_hat[l,:,i], CF[l,:,i] = \
+                    compute_lth_adj_funcs(l, Na_hat[:,:,i+1],
+                                          dNa_dt_wrapped, tbnd)
 
-            # for l in range(range(nb_evolving_nuclides)):
-            #     Na[l,:,i], Na_hat[l,:,i], CF[l,:,i] = \
-            #         compute_lth_adj_funcs(l, Na_hat[l,:,i+1])
+            lg.info("Elapsed time in the loop for adjoint funcs (s): %13.6g" %
+                (time.time() - t_beg)); t_beg = time.time()
+
+
+            pool = multiprocessing.Pool(NB_CORES)
+            Na[:,:,i], Na_hat[:,:,i], CF[:,:,i] = map(np.vstack,
+                pool.starmap(compute_lth_adj_funcs,
+                    [(l, Na_hat[:,:,i+1], dNa_dt_wrapped, tbnd,
+                                     use_el_as_final_condition)
+                        for l in range(nb_evolving_nuclides)])
+                        )
+            pool.close()
+            pool.join()
 
             lg.info("Elapsed time in the loop for adjoint funcs (s): %13.6g" %
                 (time.time() - t_beg))
