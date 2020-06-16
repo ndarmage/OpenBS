@@ -815,7 +815,7 @@ if __name__ == "__main__":
             lg.info("Elapsed time for the matrix (s): %13.6g" %
                 (time.time() - t_beg))
             # print('Matrices are equal? ',
-            #       np.sum(np.isclose(cc, dM_dN_dot_Ni)) == nb_N*nb_N)
+            #       np.sum(np.isclose(cc, dM_dN_dot_Ni)) == nb_N * nb_N)
 
             t_beg = time.time()
             # redefine dNa_dt for having a new flxi
@@ -864,7 +864,7 @@ if __name__ == "__main__":
                 # cc = np.array(Na[:,:,i], copy=True)
             else:
                 # parallel calculation by multiprocessing on posix platforms
-            
+                # remind that nb_N = nb_evolving_nuclides
                 pool = multiprocessing.Pool(NB_CORES)
                 res = pool.starmap(compute_lth_adj_funcs,
                         [(l, Na_hat[:,:,i+1], dNa_dt_wrapped, tbnd,
@@ -872,13 +872,13 @@ if __name__ == "__main__":
                             for l in range(nb_evolving_nuclides)])
                         
                 Na[:,:,i], Na_hat[:,:,i], CF[:,:,i] = \
-                    np.vstack([res[l][0] for l in range(nb_evolving_nuclides)]), \
-                    np.vstack([res[l][1] for l in range(nb_evolving_nuclides)]), \
-                    np.vstack([res[l][2] for l in range(nb_evolving_nuclides)])
+                    np.vstack([res[l][0] for l in range(nb_N)]), \
+                    np.vstack([res[l][1] for l in range(nb_N)]), \
+                    np.vstack([res[l][2] for l in range(nb_N)])
                 pool.close()
                 pool.join()
             # print('Matrices are equal? ',
-                 # np.sum(np.isclose(cc, Na[:,:,i])) == nb_N*nb_N)
+                 # np.sum(np.isclose(cc, Na[:,:,i])) == nb_N * nb_N)
             
             lg.info("Elapsed time in the loop for adjoint funcs (s): %13.6g" %
                 (time.time() - t_beg))
