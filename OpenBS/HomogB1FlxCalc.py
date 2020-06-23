@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # --*-- coding:utf-8 --*--
 """
-This module implemets the homogeneous B1 fluc calculation in the infinte
+This module implemets the homogeneous B1 flux calculation in the infinte
 (homogeneous) medium. The multigroup formalism in energy is used. The
 methodology follows stricly Hebert's textbook. This module assumes that the
 macroscopic cross sections are here provided as known data. The unknowns are
@@ -26,8 +26,8 @@ __date__ = "28/03/2019"
 __version__ = "1.0.0"
 
 # Ch. 4, pp 236, Eq. (4.127) from Hebert's textbook
-g1, g2, g3 = 4. / 15., 12. / 175., 92. / 2625.
-gamma = lambda x: 1 + g1 * x - g2 * x**2 + g3 * x**3
+g1, g2, g3 = 4. / 15., - 12. / 175., 92. / 2625.
+gamma = lambda x: 1 + g1 * x + g2 * x**2 + g3 * x**3
 
 
 def extract_real_elements(v):
@@ -101,7 +101,8 @@ def power_iteration(A, toll=1.e-6, itnmax=10):
 def find_B2_spectrum(xs, one_over_k=1., nb_eigs=None):
     "Find the B2 asymptotes leading to infinite k."
     st, ss, chi, nsf = xs  # unpack the macroscopic cross sections
-    A, C = - np.array(ss[0,:,:], copy=True), - np.array(ss[1,:,:], copy=True)
+    A, C = - np.array(ss[0,:,:], copy=True), \
+           - np.array(ss[1,:,:], copy=True) / 3.
     np.fill_diagonal(A, st + A.diagonal())
     if abs(one_over_k) > 0:
         if chi.ndim == 1:
@@ -109,14 +110,14 @@ def find_B2_spectrum(xs, one_over_k=1., nb_eigs=None):
         else:
             ChiF = np.dot(chi, nsf)
         A -= one_over_k * ChiF
-    np.fill_diagonal(C, 3. * st + C.diagonal())
+    np.fill_diagonal(C, st + C.diagonal())
     Sm1, G = 1. / st, st.size
     Sm2 = np.diag(Sm1**2)
-    A1 = np.dot(A, np.diag(Sm1))
-    A2 = np.dot(A1, Sm2)
-    A3 = np.dot(A2, Sm2)
-    a1, a2, a3, a4 = np.dot(A, C), 3. * g1 * A1, - 3. * g2 * A2, 3. * g3 * A3
-    a2 += np.identity(G)
+    A1 = np.dot(np.diag(Sm1), A)
+    A2 = np.dot(Sm2, A1)
+    A3 = np.dot(Sm2, A2)
+    a1, a2, a3, a4 = np.dot(C, A), g1 * A1, g2 * A2, g3 * A3
+    a2 += np.identity(G) / 3.
     G2, G3 = G * 2, G * 3
     M1, M2 = np.identity(G3), np.eye(G3, k=-G)
     M1[:G,:G], M1[:G,G:G2], M1[:G,G2:], M2[:G,G2:] = a1, a2, a3, -a4
@@ -124,7 +125,7 @@ def find_B2_spectrum(xs, one_over_k=1., nb_eigs=None):
     # return np.linalg.eigvals(M)
     if nb_eigs == 1:
         B2, flx = power_iteration(np.dot(np.linalg.inv(M1), M2))
-        B2, flx = 1./B2, flx[:G]
+        B2, flx = 1. / B2, flx[:G]
         if (flx < 0).all():
             flx *= -1
         if not isfundamental(flx):
