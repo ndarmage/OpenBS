@@ -39,17 +39,17 @@ def isfundamental(flx):
     return ((flx > 0).all() or (flx < 0).all())
 
 
-def get_R(st, ss, B2, adjoint=False):
+def get_R(st, ss, B2, adjoint=False, g=gamma):
     "Compute the B2-dependent removal term."
-    R = get_T(st, ss, B2)
+    R = get_T(st, ss, B2, gamma_func=g)
     R = B2 * np.linalg.inv(R) - ss[0,:,:]
     np.fill_diagonal(R, st + R.diagonal())
     return (R.conj().T if adjoint else R)
 
 
-def get_T(st, ss, B2):
+def get_T(st, ss, B2, gamma_func=gamma):
     "Compute the B2-dependent removal term."
-    w = 3. * gamma(B2 / st**2) * st
+    w = 3. * gamma_func(B2 / st**2) * st
     R = - np.array(ss[1,:,:], copy=True)
     np.fill_diagonal(R, w + R.diagonal())
     return R
@@ -66,19 +66,25 @@ def compute_deltak(B2, xs=None, k=1):
     return dk
 
 
-def compute_kpairs(xs, B2=0., adjoint=False):
+def compute_kpairs(xs, B2=0., adjoint=False, g=gamma):
     "Compute the multiplication factor eigenpairs using the input B2."
     st, ss, chi, nsf = xs  # unpack the macroscopic cross sections
     # get the fundamental eigenpair assuming a single family of fissiles
     if adjoint:
         chi, nsf = nsf.T, chi.T
-    flx = np.dot(np.linalg.inv(get_R(st, ss, B2, adjoint)), chi)
+    flx = np.dot(np.linalg.inv(get_R(st, ss, B2, adjoint, g)), chi)
     k = np.dot(nsf, flx)
     if k.size > 1:
         # calculate the matrix whose eigenvalues are the k's and whose
         # eigenvectors are the fission rates: F.R^-1(B2).chi
         k, fiss = np.linalg.eig(k)
-        flx = np.dot(flx, np.dot(fiss, np.diag(1. / k)))
+        idx = np.argsort(k)
+        k, fiss, flx = k[idx], fiss[:, idx], flx[:, idx]
+        # ...in case more isotopes than the only fissiles were included:
+        idx = np.nonzero(k)
+        k, fiss, flx = k[idx], fiss[:, idx], flx[:, idx]
+    else:
+        k = k.item(0)
     return k, flx
 
 
@@ -98,8 +104,9 @@ def power_iteration(A, toll=1.e-6, itnmax=10):
     return np.dot(f, np.dot(A, f)) / np.dot(f, f), f
 
 
-def find_B2_spectrum(xs, one_over_k=1., nb_eigs=None):
+def find_B2_spectrum(xs, one_over_k=1., nb_eigs=None, g=(g1, g2, g3)):
     "Find the B2 asymptotes leading to infinite k."
+    g1, g2, g3 = g
     st, ss, chi, nsf = xs  # unpack the macroscopic cross sections
     A, C = - np.array(ss[0,:,:], copy=True), \
            - np.array(ss[1,:,:], copy=True) / 3.
@@ -123,21 +130,24 @@ def find_B2_spectrum(xs, one_over_k=1., nb_eigs=None):
     M1[:G,:G], M1[:G,G:G2], M1[:G,G2:], M2[:G,G2:] = a1, a2, a3, -a4
     # M = np.dot(np.linalg.inv(M2), M1)
     # return np.linalg.eigvals(M)
-    if nb_eigs == 1:
-        B2, flx = power_iteration(np.dot(np.linalg.inv(M1), M2))
-        B2, flx = 1. / B2, flx[:G]
-        if (flx < 0).all():
-            flx *= -1
-        if not isfundamental(flx):
-            lg.debug("flx: " + str(flx))
-            raise RuntimeError('Flux for B2=%13.6g is not fundamental' % B2)
-    elif nb_eigs > 1:
-        raise RuntimeError('Not available yet.')
-        # use ARPACK
-        B2, flx = scipy.sparse.linalg.eigs(M2, M=M1, k=nb_eigs, which='SR')
-    else:
+    if nb_eigs is None:
         # get all eigen-pairs
         B2, flx = scipy.linalg.eig(M1, M2, check_finite=False)
+    else:
+        if nb_eigs == 1:
+            B2, flx = power_iteration(np.dot(np.linalg.inv(M1), M2))
+            B2, flx = 1. / B2, flx[:G]
+            if (flx < 0).all():
+                flx *= -1
+            if not isfundamental(flx):
+                lg.debug("flx: " + str(flx))
+                raise RuntimeError(
+                    'Flux for B2=%13.6g is not fundamental' % B2)
+        elif nb_eigs > 1:
+            raise RuntimeError('Not available yet.')
+            # use ARPACK
+            B2, flx = scipy.sparse.linalg.eigs(M2, M=M1, k=nb_eigs,
+                                               which='SR')
     return B2, flx
 
 

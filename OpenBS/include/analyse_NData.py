@@ -434,11 +434,12 @@ def mergeRPData(d1=None, d2=None, vrbs=True):
 
 
 def macroxszg(microlib, p, xstype="Total", z=0, g=0, ig=None, il=None, \
-    vrbs=False):
+    vrbs=False, keep_separate=False):
     """Compute the macroscopic cross section of a given type, in the zone z and
     the energy group g, at the input state parameter vector p. The second group
     index and the anisotropy order are needed in case of scattering cross
-    section."""
+    section. If keep_separate is True, the output cross sections are still
+    macroscopic but they are separate per available nuclide."""
     if not isinstance(p, tuple):
         raise ValueError("Input state parameter vector is not tuple")
 
@@ -455,15 +456,16 @@ def macroxszg(microlib, p, xstype="Total", z=0, g=0, ig=None, il=None, \
     reatypes = list(
         set.union( *map(set, [zmlib[iso].keys() for iso in isoz]) )
     )
-    if not xstype in reatypes:
+    if xstype not in reatypes:
         if vrbs: print(xstype + " is not available in zone {:d}".format(z))
         return 0.
 
     if "dffconstant" in xstype.lower():
         print("WARNING: you are requesting macro xs on diffusion constants")
 
+    # get type of all float data in microlib
     concs = np.array([zmlib[iso]["conc"][p] for iso in isoz])
-    mxs = np.zeros((niso), dtype=concs.dtype)
+    mxs = np.zeros_like(concs)
 
     if ig is None:
         if il is None:
@@ -508,10 +510,20 @@ def macroxszg(microlib, p, xstype="Total", z=0, g=0, ig=None, il=None, \
                     if vrbs: print(iso + " does not have the xs "+xstype)
                     pass
 
-    # print (concs)
-    # print (mxs)
-    # print (concs * mxs); input('ok')
-    return np.nansum( concs * mxs )
+    # print(concs)
+    # print(mxs)
+    # print(concs * mxs); input('ok')
+    if keep_separate:
+        if 'fissionspectrum' in xstype.lower():
+            macroxs = np.nan_to_num(mxs)
+        else:
+            macroxs = np.nan_to_num(mxs * concs)
+    else:
+        if 'fissionspectrum' in xstype.lower():
+            macroxs = np.mean(mxs[mxs > 0])
+        else:
+            macroxs = np.nansum(mxs * concs)
+    return macroxs
 #-----------------------------------------------------------------
 
 
@@ -641,14 +653,18 @@ def RRizg(microlib, flx, p, xstype="Total", i=None, z=0, g=0, \
 #-----------------------------------------------------------------
 
 
-def calc_kinf_from_microlib_at_p(data, pp):
-    """Calculate the kinf with the xs at p (in pp) from the microlib."""
+def calc_kinf_from_microlib_at_p(data, p):
+    """Calculate the kinf with the xs at p from the microlib."""
     # memento, if ng = 1 and nzone = 1
     # kinfc = ["NuFission"][p] / (["Absorption"][p] - ["Nexcess"][p])
     xslib, zflx = data["microlib"], data["ZoneFlux"]
     ng, nzone = data["NG"], data["NZONE"]
-    P, A, p = 0., 0., tuple(pp[1:-1])
-    with_leakage_model = not np.isnan(data["BUCKLING"][p])
+    P, A, pp = 0., 0., np.insert(np.append(p, 0), 0, 0)
+    # try:
+        # with_leakage_model = not np.isnan(data["BUCKLING"][p])
+    # except KeyError:
+        # # BUCKLING and others are removed from data if missing
+        # with_leakage_model = False
     for iz in range(nzone):
         #zp = np.append([ iz ], p)
         pp[0] = iz
@@ -861,7 +877,7 @@ def fill_microlibz_v2(microlibz, avaiso, avarea_addrzx_i, p, anis_pl1, ng, \
 
 
 def readMPO(H5file="", vrbs=False, load=True, check=True, save=True,
-            remove_time=False):
+            remove_time=False, output_nb=-1):
     """Read homog data from the H5file.
 
     :param H5file: input H5 file
@@ -870,12 +886,14 @@ def readMPO(H5file="", vrbs=False, load=True, check=True, save=True,
     :param check: check the dependency of considered parameters with state points and/or zone
     :param save: store data on a serialized pickle file
     :param remove_time: remove Time from the list of independent variables
+    :param output_nb: nb of specific OUTPUT folder to fetch data from
     :type H5file: string
     :type vrbs: boolean
     :type load: boolean
     :type check: boolean
     :type save: boolean
     :type remove_time: boolean
+    :type output_nb: int
     :return: the dict containing informations in each state point and zone
     :rtype: dict
 
@@ -890,7 +908,7 @@ def readMPO(H5file="", vrbs=False, load=True, check=True, save=True,
     8. anis_pl1
     9. locvaltp
     """
-    if check: time_in_readMPO = time.time()
+    if check: time_in_readMPO = time.perf_counter()
 
     if load:
         extpos = H5file.rfind('.')
@@ -939,31 +957,43 @@ def readMPO(H5file="", vrbs=False, load=True, check=True, save=True,
     lg.info("Nb. of values per PARAM: " + str(nvalue))
     
     # 2. number of different output groups
-    noutput = hf[ "output/NOUTPUT" ][()].item()
-    if noutput > 1:
-        raise ValueError("Multi-output_x MPO not supported yet.")
-    # output_0 is used to retrieve common data to all state points
-    baseadrx = "output/output_0/"
-    lg.info("-> Process data in group output_{:d}".format(0))
+    noutput = hf["output/NOUTPUT"][()].item()
+    if output_nb == -1:    
+        if noutput > 1:
+            raise RuntimeError("Multi-output_x MPO not supported yet." +
+                               "Please select an input OUTPUT group.")
+        else:
+            output_nb = 0
+    elif not (0 <= output_nb < noutput):
+        raise ValueError("The OUTPUT group nb {:d} is missing".format(
+                         output_nb))
+        
+    # output_nb is used to retrieve common data to all state points
+    baseadrx = "output/output_{:d}/".format(output_nb)
+    lg.info("-> Process data in group output_{:d}".format(output_nb))
     nb_pntx = len(hf[baseadrx]) - 1  # only in given output_x
 
     # 3. number of zones
-    nzone = hf["geometry/geometry_0/NZONE"][()].item()
+    geoadrx = "geometry/geometry_{:d}".format(output_nb)
+    nzone = hf[geoadrx + "/NZONE"][()].item()
     lg.info("The number of zones NZONE is {:d}.".format(nzone))
     # volumes of the homogenization zones in cm2
-    nvols = hf["geometry/geometry_0/ZONEVOLUME"][()].astype(h5float)
-    znames = hf["geometry/geometry_0/ZONE_NAME"][()].astype(str)
+    nvols = hf[geoadrx + "/ZONEVOLUME"][()].astype(h5float)
+    znames = hf[geoadrx + "/ZONE_NAME"][()].astype(str)
 
     # 4. number of energy groups
     # verification: number of energy groups independent on state points
     if check:
-        ng_ls = [len(hf[baseadrx + "statept_{:d}/flux/TOTALFLUX".format(isp)][()])
-                     for isp in range(nb_pntx)]
+        ng_ls = [len(
+            hf[baseadrx + "statept_{:d}/flux/TOTALFLUX".format(isp)][()]
+                    ) for isp in range(nb_pntx)]
         # verify if all the ng_ls[i] are the same
         if all(i == ng_ls[0] for i in ng_ls):
-            lg.debug("The number of energy groups for all the state points is the same.")
+            lg.debug("The number of energy groups for all the state" +
+                     " points is the same.")
         else:
-            raise ValueError("Attention! There are different energy meshes among state points, please check.")
+            raise ValueError("Attention! There are different energy " +
+                             "meshes among state points, please check.")
 
     ng = len(hf[baseadrx + "statept_0/flux/TOTALFLUX"][()])
     lg.info("Nb. of en. groups in the (homog) xslib = {:d}".format(ng))
@@ -1158,10 +1188,10 @@ def readMPO(H5file="", vrbs=False, load=True, check=True, save=True,
 
     microlib = data["microlib"]
 
-    time_stpnts_loop = time.time()
+    time_stpnts_loop = time.perf_counter()
     lg.info("Start fetching data from state points")
     for isp in range(nb_pnts):
-        time_per_isp = time.time()
+        time_per_isp = time.perf_counter()
         bb = baseadrx + "statept_{:d}".format(isp)
 
         # state parameters
@@ -1178,7 +1208,7 @@ def readMPO(H5file="", vrbs=False, load=True, check=True, save=True,
         pp, p = np.insert(np.append(p, 0), 0, 0), tuple(p)
 
         for iz in range(nzone):
-            time_per_zone = time.time()
+            time_per_zone = time.perf_counter()
             bbz = bb + "/zone_{:d}".format(iz)
 
             # total isotope concentrations
@@ -1197,12 +1227,12 @@ def readMPO(H5file="", vrbs=False, load=True, check=True, save=True,
             xs = hf[bbz + "/CROSSECTION"][()]
 
             # put xs data in microlib[iz], together with the available concs
-            time_microlib_per_zone = time.time()
+            time_microlib_per_zone = time.perf_counter()
             fill_microlibz_v2(microlib[iz], avaiso[isp][iz], \
                 avarea[addrzx_i], p, anis_pl1, ng, totisoconc, \
                 transp_avails[addrzx_i], pos_avails[addrzx_i], \
                 transprofile, xs)
-            time_microlib_per_zone = time.time() - time_microlib_per_zone
+            time_microlib_per_zone = time.perf_counter() - time_microlib_per_zone
 
             # tuple of iz and p
             pp[0] = iz
@@ -1247,8 +1277,8 @@ def readMPO(H5file="", vrbs=False, load=True, check=True, save=True,
                     raise RuntimeError("This case is not supported yet!")
             
             if check:
-                time_per_zone = time.time() - time_per_zone
-                print("{0:>9.6f}s time spent for zone {1:>4d}".format( 
+                time_per_zone = time.perf_counter() - time_per_zone
+                print("{0:>9.6g}s time spent for zone {1:>4d}".format( 
                     time_per_zone, iz) + " ({:5.3f}% in microlibz)".format(
                     time_microlib_per_zone / time_per_zone * 100))
 
@@ -1268,8 +1298,8 @@ def readMPO(H5file="", vrbs=False, load=True, check=True, save=True,
 
         if check or vrbs:
             print("time spent in state point {:d} (s): {:f}".format(isp, \
-                time.time() - time_per_isp))
-            kinfc = calc_kinf_from_microlib_at_p(data, pp)
+                time.perf_counter() - time_per_isp))
+            kinfc = calc_kinf_from_microlib_at_p(data, p)
             dkinf = (kinf - kinfc) * 1.e5
             outpt = (2 * " {:8.6f},"+" {:+8.3f}").format(kinf, kinfc, dkinf)
             if vrbs:
@@ -1280,15 +1310,14 @@ def readMPO(H5file="", vrbs=False, load=True, check=True, save=True,
     """
     if check:
         print("+ loop on state points takes %f (s)".format( \
-            time.time() - time_stpnts_loop))
+            time.perf_counter() - time_stpnts_loop))
     """
 
     hf.close()
     if not with_leakage_model:
         if np.nansum(data["BUCKLING"]) > 0:
             raise RuntimeError("leakage model disabled, but BUCKLING > 0!")
-        del data["BUCKLING"]  # to save storage
-        del data["DB2"]
+        del data["BUCKLING"], data["DB2"]  # to save storage
 
     # backup data
     if save:
@@ -1301,7 +1330,7 @@ def readMPO(H5file="", vrbs=False, load=True, check=True, save=True,
 
     if check:
         lg.debug("Total time spent in readMPO (s): {:f}".format( \
-            time.time() - time_in_readMPO))
+            time.perf_counter() - time_in_readMPO))
     return data
 
 
