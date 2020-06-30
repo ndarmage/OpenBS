@@ -16,7 +16,7 @@ from HomogB1FlxCalc import *
 sys.path.append(os.path.join(baseDir, "include"))
 from analyse_NData import *
 
-MPOFile = "UO2_325_AFA3G17_idt_8G.hdf"
+MPOFile = "UO2_325_AFA3G17_tdt_8G.hdf"
 # MPOFile = "UO2_325_AFA3G17_idt_2G_noB2.hdf"
 MPOFile = os.path.join(baseDir, "lib", MPOFile)
 
@@ -120,20 +120,12 @@ def plot_eigenspectrum(B2_list):
     plt.show()
 
 
-if __name__ == "__main__":
-
-    # calculate equidistant lethargy meshes
-    # for N in [4, 8, 16, 32, 64, 128, 256]:
-        # equidistant_lethargie_energy_mesh(N)
-
-    B2 = np.logspace(-3, 0, 100)
-    B2 = np.append(np.append(-B2[::-1], [0]), B2)
+def plot_gamma_func(B2):
     y = [alpha(b) for b in B2]
     z = [full_gamma(b) for b in B2]
     s = [gamma(b) for b in B2]  # approximation
     # print(B2)
     # print(y)
-    import matplotlib.pyplot as plt
     fig, ax = plt.subplots()
     ax.plot(B2, y, 'C0:', label=r'$\alpha$ (cm$^{-1}$)')
     ax.plot(B2, z, 'C1-', label=r'$\gamma$')
@@ -144,7 +136,18 @@ if __name__ == "__main__":
     # ax.set_xscale('symlog')
     plt.show()
 
-    sys.exit()
+
+if __name__ == "__main__":
+
+    # calculate equidistant lethargy meshes
+    # for N in [4, 8, 16, 32, 64, 128, 256]:
+        # equidistant_lethargie_energy_mesh(N)
+
+    # B2 = np.logspace(-3, 0, 100)
+    # B2 = np.append(np.append(-B2[::-1], [0]), B2)
+    # plot_gamma_func(B2)
+
+    # sys.exit()
     # verify the implementation
     MPOdata = readMPO(MPOFile)
     print(MPOdata.keys())
@@ -188,11 +191,13 @@ if __name__ == "__main__":
         
     # g1, g2, g3 = 4. / 15., - 12. / 175., 92. / 2625.
     B2_list = []
+    B2_g4, flx = find_B2_spectrum(xs, one_over_k=1., g=(g1, g2, g3, g4))
+    B2_list.append(B2_g4)
     B2_g3, flx = find_B2_spectrum(xs, one_over_k=1., g=(g1, g2, g3))
     B2_list.append(B2_g3)
-    B2_g2, flx = find_B2_spectrum(xs, one_over_k=1., g=(g1, g2, 0.))
+    B2_g2, flx = find_B2_spectrum(xs, one_over_k=1., g=(g1, g2))
     B2_list.append(B2_g2)
-    B2_g1, flx = find_B2_spectrum(xs, one_over_k=1., g=(g1, 0., 0.))
+    B2_g1, flx = find_B2_spectrum(xs, one_over_k=1., g=(g1))
     B2_list.append(B2_g1)
     plot_eigenspectrum(B2_list)
     

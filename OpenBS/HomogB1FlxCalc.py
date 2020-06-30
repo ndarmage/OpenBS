@@ -25,9 +25,13 @@ __author__ = "D. Tomatis"
 __date__ = "30/06/2020"
 __version__ = "1.1.0"
 
-# Ch. 4, pp 236, Eq. (4.127) from Hebert's textbook
-g1, g2, g3 = 4. / 15., - 12. / 175., 92. / 2625.
-gamma = lambda x: 1 + g1 * x + g2 * x**2 + g3 * x**3
+polar2xy = lambda rho, theta: rho * (np.sin(theta) + 1j * np.cos(theta))
+
+# Ch. 4, pp 236, Eq. (4.127) from Hebert's textbook and series expansion
+# by sympy (Maclaurin - series(expr, x=None, x0=0, n=6, dir='+'))
+g1, g2, g3, g4 = 4. / 15., - 12. / 175., 92. / 2625., - 7516. / 336875.
+gamma = lambda x, c1=g1, c2=g2, c3=g3, c4=g4: \
+    1 + c1 * x + c2 * x**2 + c3 * x**3 + c4 * x**4
 
 def alpha(B2, S=1.):
     "alpha function, see theory"
@@ -123,30 +127,41 @@ def power_iteration(A, toll=1.e-6, itnmax=10):
     return np.dot(f, np.dot(A, f)) / np.dot(f, f), f
 
 
-def find_B2_spectrum(xs, one_over_k=1., nb_eigs=None, g=(g1, g2, g3)):
+def find_B2_spectrum(xs, one_over_k=1., nb_eigs=None, g=(g1, g2, g3, 0)):
     "Find the B2 asymptotes leading to infinite k."
-    g1, g2, g3 = g
     st, ss, chi, nsf = xs  # unpack the macroscopic cross sections
-    A, C = - np.array(ss[0,:,:], copy=True), \
+    # g1, g2, g3 = g
+    N, G = np.count_nonzero(np.array(g)), st.size
+    print(g, N)
+    M = [None for i in range(N)]  # list of block matrices
+    R, C = - np.array(ss[0,:,:], copy=True), \
            - np.array(ss[1,:,:], copy=True) / 3.
-    np.fill_diagonal(A, st + A.diagonal())
+    np.fill_diagonal(R, st + R.diagonal())
     if abs(one_over_k) > 0:
         if chi.ndim == 1:
             ChiF = np.outer(chi, nsf)
         else:
             ChiF = np.dot(chi, nsf)
-        A -= one_over_k * ChiF
+        R -= one_over_k * ChiF
     np.fill_diagonal(C, st + C.diagonal())
-    Sm1, G = 1. / st, st.size
+    Sm1 = 1. / st
     Sm2 = np.diag(Sm1**2)
-    A1 = np.dot(np.diag(Sm1), A)
+    A1 = np.dot(np.diag(Sm1), R)
     A2 = np.dot(Sm2, A1)
     A3 = np.dot(Sm2, A2)
-    a1, a2, a3, a4 = np.dot(C, A), g1 * A1, g2 * A2, g3 * A3
-    a2 += np.identity(G) / 3.
-    G2, G3 = G * 2, G * 3
-    M1, M2 = np.identity(G3), np.eye(G3, k=-G)
-    M1[:G,:G], M1[:G,G:G2], M1[:G,G2:], M2[:G,G2:] = a1, a2, a3, -a4
+    # a1, a2, a3, a4 = np.dot(C, R), g1 * A1, g2 * A2, g3 * A3
+    # a2 += np.identity(G) / 3.
+    GNm1, GN = G * (N - 1), G * N
+    M1, M2 = np.identity(GN), np.eye(GN, k=-G)
+    M[0] = np.dot(C, R)
+    M[1] = np.dot(np.diag(Sm1), R) * g[0] + np.identity(G) / 3.
+    for i in range(N):
+        if i > 1:
+            M[i] = np.dot(Sm2, M[i-1]) * g[i-1]
+        idx = np.arange(G * i, G*(i + 1))
+        M1[:G, idx] = M[i]
+    # M1[:G,:G], M1[:G,G:GNm1], M1[:G,GNm1:], M2[:G,GNm1:] = a1, a2, a3, -a4
+    M2[:G, -G:] = -np.dot(Sm2, M[-1]) * g[-1]
     # M = np.dot(np.linalg.inv(M2), M1)
     # return np.linalg.eigvals(M)
     if nb_eigs is None:
