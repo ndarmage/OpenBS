@@ -21,13 +21,32 @@ import scipy.sparse.linalg
 import scipy.optimize as opt
 
 __title__ = "MG Homog B1 calculation"
-__author__ = "D. Tomatis, Y. Wang"
-__date__ = "28/03/2019"
-__version__ = "1.0.0"
+__author__ = "D. Tomatis"
+__date__ = "30/06/2020"
+__version__ = "1.1.0"
 
 # Ch. 4, pp 236, Eq. (4.127) from Hebert's textbook
 g1, g2, g3 = 4. / 15., - 12. / 175., 92. / 2625.
 gamma = lambda x: 1 + g1 * x + g2 * x**2 + g3 * x**3
+
+def alpha(B2, S=1.):
+    "alpha function, see theory"
+    BoS = np.sqrt(abs(B2)) / S
+    if np.isclose(B2, 0):
+        a = 1 - BoS**2 / 3 + BoS**4 / 5 - BoS**6 / 7
+    elif B2 > 0:
+        a = np.arctan(BoS) / BoS  # 1 / np.tan(BoS) / BoS
+    else:
+        a = 0.5 * (np.log(1 + BoS) - np.log(1 - BoS)) / BoS
+    return a / S
+
+
+def beta(B2, S=1.):
+    return (1 - alpha(B2, S) * S) / B2
+
+
+def full_gamma(B2, S=1.):
+    return alpha(B2, S) / beta(B2, S) / 3 / S
 
 
 def extract_real_elements(v):

@@ -463,7 +463,6 @@ def macroxszg(microlib, p, xstype="Total", z=0, g=0, ig=None, il=None, \
     if "dffconstant" in xstype.lower():
         print("WARNING: you are requesting macro xs on diffusion constants")
 
-    # get type of all float data in microlib
     concs = np.array([zmlib[iso]["conc"][p] for iso in isoz])
     mxs = np.zeros_like(concs)
 
@@ -802,8 +801,10 @@ def fill_microlibz_v2(microlibz, avaiso, avarea_addrzx_i, p, anis_pl1, ng, \
     if not isinstance(p, tuple):
         raise ValueError("Input state parameter vector is not tuple")
 
-    nb_params, pp = len(p), np.append(p, np.zeros((3), dtype=np.int8))
-
+    nb_params, pp, gg = len(p), \
+        np.append(p, np.zeros((3), dtype=type(p[0]))), 2 * ng
+    nb_paramsp1, nb_paramsp2 = nb_params + 1, nb_params + 2
+    
     # browse available isotopes
     for isoid, isonm in avaiso:
 
@@ -816,8 +817,8 @@ def fill_microlibz_v2(microlibz, avaiso, avarea_addrzx_i, p, anis_pl1, ng, \
                 # determine the first value in the TRANSPROFILE
                 TP_0 = transp_avails_addrzx_i[isoid]
                 # determine fag and adr
-                fag = transprofile[TP_0 : TP_0 + ng]
-                adr = transprofile[TP_0 + ng : TP_0 + 2 * ng + 1]
+                fag, adr = transprofile[TP_0 : TP_0 + ng], \
+                           transprofile[TP_0 + ng : TP_0 + gg + 1]
 
                 for ianis in range(anis_pl1):
                     pp[nb_params] = ianis
@@ -831,7 +832,7 @@ def fill_microlibz_v2(microlibz, avaiso, avarea_addrzx_i, p, anis_pl1, ng, \
                                 # state parameter for scattering
                                 # transpose the matrix to get a lower tringaular-like form
                                 #pp[nb_params+1], pp[nb_params+2]= idg, iag
-                                pp[nb_params+1], pp[nb_params+2]= iag, idg
+                                pp[nb_paramsp1], pp[nb_paramsp2]= iag, idg
 
                                 microlibz[isonm][reanm][tuple(pp)] = \
                                     xs[pos_avails_addrzx_i[isoid][reaid] + \
@@ -851,27 +852,40 @@ def fill_microlibz_v2(microlibz, avaiso, avarea_addrzx_i, p, anis_pl1, ng, \
                 microlibz[isonm][reanm][tuple(pp[:-3])] = xs[pos0 : pos0 + ng]
 
         # determine the total xs
-        pp[nb_params], xsk = 0, "Scattering"
+        pp[nb_params] = 0
         # warning: remind that the sum is on axis 0 because the scattering
         # matrices are lower triangular-like
-        ##scat0 = np.sum(microlibz[ isonm ][ xsk ][tuple(pp[:-2])], axis=0)
+        ##scat0 = np.sum(microlibz[ isonm ][ "Scattering" ][tuple(pp[:-2])], axis=0)
         ##microlibz[ isonm ][ "Total" ][tuple(pp[:-3])] = scat0
         ## if "Nxcess" in microlibz[ isonm ]:
         ##     microlibz[ isonm ][ "Total" ][tuple(pp[:-3])] -= \
         ##         microlibz[ isonm ][ "Nxcess" ][tuple(pp[:-3])]
-        microlibz[ isonm ][ "Total" ][tuple(pp[:-3])] = \
-            microlibz[ isonm ][ "Diffusion" ][tuple(pp[:-2])]
+        if "Diffusion" in microlibz[ isonm ]:
+            microlibz[ isonm ][ "Total" ][tuple(pp[:-3])] = \
+                microlibz[ isonm ][ "Diffusion" ][tuple(pp[:-2])]
+        elif "Scattering" in microlibz[ isonm ]:
+            scat0 = np.sum(
+                microlibz[ isonm ][ "Scattering" ][tuple(pp[:-2])],
+                           axis=0)
+            microlibz[ isonm ][ "Total" ][tuple(pp[:-3])] = scat0
+            if "Nxcess" in microlibz[ isonm ]:
+                microlibz[ isonm ][ "Total" ][tuple(pp[:-3])] -= \
+                    microlibz[ isonm ][ "Nxcess" ][tuple(pp[:-3])]
+        elif "Absorption" not in microlibz[ isonm ]:
+            raise RuntimeError("No Scattering data for " + isonm +
+                " and no Absorption either!\n -> Missing data for Total xs.")
         if "Absorption" in microlibz[ isonm ]:
             microlibz[ isonm ][ "Total" ][tuple(pp[:-3])] += \
                 microlibz[ isonm ][ "Absorption" ][tuple(pp[:-3])]
-        if anis_pl1 >= 1:
+        if (anis_pl1 >= 1) and ("Scattering" in microlibz[ isonm ]):
             pp[nb_params] = 1
-            scat1 = np.sum(microlibz[ isonm ][ xsk ][tuple(pp[:-2])], axis=0)
-            scat1 *= one_third
+            scat1 = one_third * np.sum(
+                microlibz[ isonm ][ "Scattering" ][tuple(pp[:-2])],
+                                       axis=0)
         else:
-            scat1 = np.zeros_like(scat0)
-        microlibz[ isonm ][ "DffConstant" ][tuple(pp[:-3])] = one_third / \
-            ( microlibz[ isonm ][ "Total" ][tuple(pp[:-3])] - scat1 )
+            scat1 = np.zeros(ng)
+        microlibz[ isonm ]["DffConstant"][tuple(pp[:-3])] = one_third / \
+            ( microlibz[ isonm ]["Total"][tuple(pp[:-3])] - scat1 )
     pass
 #-----------------------------------------------------------------
 
@@ -965,7 +979,7 @@ def readMPO(H5file="", vrbs=False, load=True, check=True, save=True,
         else:
             output_nb = 0
     elif not (0 <= output_nb < noutput):
-        raise ValueError("The OUTPUT group nb {:d} is missing".format(
+        raise ValueError("The OUTPUT group nb {:d} is not valid".format(
                          output_nb))
         
     # output_nb is used to retrieve common data to all state points
