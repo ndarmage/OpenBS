@@ -143,11 +143,11 @@ if __name__ == "__main__":
     # for N in [4, 8, 16, 32, 64, 128, 256]:
         # equidistant_lethargie_energy_mesh(N)
 
-    # B2 = np.logspace(-3, 0, 100)
-    # B2 = np.append(np.append(-B2[::-1], [0]), B2)
-    # plot_gamma_func(B2)
+    B2 = np.logspace(-3, 0, 100)
+    B2 = np.append(np.append(-B2[::-1], [0]), B2)
+    plot_gamma_func(B2)
 
-    # sys.exit()
+    sys.exit()
     # verify the implementation
     MPOdata = readMPO(MPOFile)
     print(MPOdata.keys())

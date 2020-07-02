@@ -39,7 +39,7 @@ coefs = np.array([4. / 15.,
 
 def gamma(x, cs=coefs):
     g = cs[-1]
-    for c in cs[-2::-1]:
+    for c in np.append(cs[-2::-1], [1]):
         g = g * x + c
     return g
 
