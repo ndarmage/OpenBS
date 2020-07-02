@@ -29,9 +29,20 @@ polar2xy = lambda rho, theta: rho * (np.sin(theta) + 1j * np.cos(theta))
 
 # Ch. 4, pp 236, Eq. (4.127) from Hebert's textbook and series expansion
 # by sympy (Maclaurin - series(expr, x=None, x0=0, n=6, dir='+'))
-g1, g2, g3, g4 = 4. / 15., - 12. / 175., 92. / 2625., - 7516. / 336875.
-gamma = lambda x, c1=g1, c2=g2, c3=g3, c4=g4: \
-    1 + c1 * x + c2 * x**2 + c3 * x**3 + c4 * x**4
+# g1, g2, g3, g4 = 4. / 15., - 12. / 175., 92. / 2625., - 7516. / 336875.
+# gamma = lambda x, c1=g1, c2=g2, c3=g3, c4=g4: \
+    # 1 + c1 * x + c2 * x**2 + c3 * x**3 + c4 * x**4
+coefs = np.array([4. / 15.,
+               - 12. / 175.,
+                 92. / 2625.,
+             - 7516. / 336875.])
+
+def gamma(x, cs=coefs):
+    g = cs[-1]
+    for c in cs[-2::-1]:
+        g = g * x + c
+    return g
+
 
 def alpha(B2, S=1.):
     "alpha function, see theory"
@@ -127,7 +138,7 @@ def power_iteration(A, toll=1.e-6, itnmax=10):
     return np.dot(f, np.dot(A, f)) / np.dot(f, f), f
 
 
-def find_B2_spectrum(xs, one_over_k=1., nb_eigs=None, g=(g1, g2, g3, 0)):
+def find_B2_spectrum(xs, one_over_k=1., nb_eigs=None, g=coefs):
     "Find the B2 asymptotes leading to infinite k."
     st, ss, chi, nsf = xs  # unpack the macroscopic cross sections
     # g1, g2, g3 = g

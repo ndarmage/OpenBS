@@ -191,13 +191,13 @@ if __name__ == "__main__":
         
     # g1, g2, g3 = 4. / 15., - 12. / 175., 92. / 2625.
     B2_list = []
-    B2_g4, flx = find_B2_spectrum(xs, one_over_k=1., g=(g1, g2, g3, g4))
+    B2_g4, flx = find_B2_spectrum(xs, one_over_k=1., g=coefs)
     B2_list.append(B2_g4)
-    B2_g3, flx = find_B2_spectrum(xs, one_over_k=1., g=(g1, g2, g3))
+    B2_g3, flx = find_B2_spectrum(xs, one_over_k=1., g=coefs[:-1])
     B2_list.append(B2_g3)
-    B2_g2, flx = find_B2_spectrum(xs, one_over_k=1., g=(g1, g2))
+    B2_g2, flx = find_B2_spectrum(xs, one_over_k=1., g=coefs[:-2])
     B2_list.append(B2_g2)
-    B2_g1, flx = find_B2_spectrum(xs, one_over_k=1., g=(g1))
+    B2_g1, flx = find_B2_spectrum(xs, one_over_k=1., g=coefs[:-3])
     B2_list.append(B2_g1)
     plot_eigenspectrum(B2_list)
     
