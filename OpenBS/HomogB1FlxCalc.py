@@ -1,17 +1,26 @@
 #!/usr/bin/env python3
 # --*-- coding:utf-8 --*--
 """
-This module implemets the homogeneous B1 flux calculation in the infinte
-(homogeneous) medium. The multigroup formalism in energy is used. The
-methodology follows stricly Hebert's textbook. This module assumes that the
-macroscopic cross sections are here provided as known data. The unknowns are
-the multigroup neutron flux and the buckling B**2, which is the eigenvalue.
-We solve this non-linear eigenvalue problem by a root-finding method.
+This module implements the homogeneous B1 flux calculation in the
+infinite (homogeneous) medium. The multigroup formalism in energy is
+used. The methodology follows stricly Hebert's textbook. This module
+assumes that the macroscopic cross sections are here provided as known
+data. The unknowns are the multigroup neutron flux and the buckling
+B**2, which is the eigenvalue. We solve this non-linear eigenvalue
+problem by a root-finding method, or by an ordinary linear generalized
+eigenvalue problem after a suitable change of variable. This last
+solving method is suggested by the polynomial approximation of the
+function gamma.
+
+.. note:: The coefficients of the polynomial approximations for gamma
+          are obtained by the python package sympy (series function).
+
 
 References
 ==========
 
-1. Hébert A., Applied reactor physics. Presses Inter. Polytechnique (2009).
+1. Hébert A., Applied reactor physics. Presses Inter. Polytechnique
+   (2009).
 """
 import os
 import logging as lg
@@ -29,15 +38,15 @@ polar2xy = lambda rho, theta: rho * (np.sin(theta) + 1j * np.cos(theta))
 
 # Ch. 4, pp 236, Eq. (4.127) from Hebert's textbook and series expansion
 # by sympy (Maclaurin - series(expr, x=None, x0=0, n=6, dir='+'))
-# g1, g2, g3, g4 = 4. / 15., - 12. / 175., 92. / 2625., - 7516. / 336875.
-# gamma = lambda x, c1=g1, c2=g2, c3=g3, c4=g4: \
-    # 1 + c1 * x + c2 * x**2 + c3 * x**3 + c4 * x**4
 coefs = np.array([4. / 15.,
                - 12. / 175.,
                  92. / 2625.,
-             - 7516. / 336875.])
+             - 7516. / 336875.,
+              347476 / 21896875,
+          - 83263636 / 6897515625])
 
-def gamma(x, cs=coefs):
+
+def gamma_approx(x, cs=coefs):
     g = cs[-1]
     for c in np.append(cs[-2::-1], [1]):
         g = g * x + c
@@ -47,12 +56,13 @@ def gamma(x, cs=coefs):
 def alpha(B2, S=1.):
     "alpha function, see theory"
     BoS = np.sqrt(abs(B2)) / S
-    if np.isclose(B2, 0):
-        a = 1 - BoS**2 / 3 + BoS**4 / 5 - BoS**6 / 7
+    if np.isclose(B2, 0, atol=1e-6):
+        # default criteria for close proximity: rtol=1e-05, atol=1e-08
+        a = 1 - BoS**2 / 3 + BoS**4 / 5 - BoS**6 / 7 + BoS**8 / 9
     elif B2 > 0:
         a = np.arctan(BoS) / BoS  # 1 / np.tan(BoS) / BoS
     else:
-        a = 0.5 * (np.log(1 + BoS) - np.log(1 - BoS)) / BoS
+        a = (np.log(1 + BoS) - np.log(1 - BoS)) / BoS / 2
     return a / S
 
 
@@ -60,7 +70,7 @@ def beta(B2, S=1.):
     return (1 - alpha(B2, S) * S) / B2
 
 
-def full_gamma(B2, S=1.):
+def gamma(B2, S=1.):
     return alpha(B2, S) / beta(B2, S) / 3 / S
 
 
@@ -73,7 +83,7 @@ def isfundamental(flx):
     return ((flx > 0).all() or (flx < 0).all())
 
 
-def get_R(st, ss, B2, adjoint=False, g=gamma):
+def get_R(st, ss, B2, adjoint=False, g=gamma_approx):
     "Compute the B2-dependent removal term."
     R = get_T(st, ss, B2, gamma_func=g)
     R = B2 * np.linalg.inv(R) - ss[0,:,:]
@@ -81,7 +91,7 @@ def get_R(st, ss, B2, adjoint=False, g=gamma):
     return (R.conj().T if adjoint else R)
 
 
-def get_T(st, ss, B2, gamma_func=gamma):
+def get_T(st, ss, B2, gamma_func=gamma_approx):
     "Compute the B2-dependent removal term."
     w = 3. * gamma_func(B2 / st**2) * st
     R = - np.array(ss[1,:,:], copy=True)
@@ -100,7 +110,7 @@ def compute_deltak(B2, xs=None, k=1):
     return dk
 
 
-def compute_kpairs(xs, B2=0., adjoint=False, g=gamma):
+def compute_kpairs(xs, B2=0., adjoint=False, g=gamma_approx):
     "Compute the multiplication factor eigenpairs using the input B2."
     st, ss, chi, nsf = xs  # unpack the macroscopic cross sections
     # get the fundamental eigenpair assuming a single family of fissiles
@@ -139,10 +149,12 @@ def power_iteration(A, toll=1.e-6, itnmax=10):
 
 
 def find_B2_spectrum(xs, one_over_k=1., nb_eigs=None, g=coefs):
-    "Find the B2 asymptotes leading to infinite k."
+    "Find the B2 spectrum given the input arguments."
     st, ss, chi, nsf = xs  # unpack the macroscopic cross sections
     # g1, g2, g3 = g
-    N, G = np.count_nonzero(np.array(g)), st.size
+    N, G = len(g), st.size
+    while np.isclose(g[N-1], 0):
+        N -= 1
     print(g, N)
     M = [None for i in range(N)]  # list of block matrices
     R, C = - np.array(ss[0,:,:], copy=True), \
@@ -208,19 +220,20 @@ def find_B2_asymptotes(xs, check_asymptotes=True):
         lg.debug("Real asymptotes: " + str(real_B2_asympts))
         for b2 in real_B2_asympts:
             det_R = np.linalg.det(get_R(st, ss, b2))
-            lg.debug("det(R(B2 = {:<+13.6g})) = {:>13.6e}".format(b2, det_R))
+            lg.debug("det(R(B2 = {:<+13.6g})) = {:>13.6e}".format(b2,
+                                                                 det_R))
             np.testing.assert_almost_equal(0, det_R,
                 err_msg="B2=%f does not make R singular" % b2)
     return real_B2_asympts
 
 
 #def find_B2(xs, B2M=1., k=1., nb=1):
-def find_B2(xs, nb=1):
+def find_B2(xs, nb=1, c=coefs):
     "Find the nb eigenvalues B2 as root of the degenerate system equations."
     # B2_asympts = find_B2_asymptotes(xs)
     # B2 = opt.brentq(compute_deltak, B2_asympts.max() + 1.e-10,
     #                 B2M, args=(xs, k))
-    B2, flx = find_B2_spectrum(xs, nb_eigs=nb)
+    B2, flx = find_B2_spectrum(xs, nb_eigs=nb, g=c)
     return B2, flx
 
 
@@ -244,5 +257,5 @@ if __name__ == "__main__":
         err_msg="adjoint kinf not verified.")
     np.testing.assert_allclose(adj_flx_inf, [1.1913539, 1.50878553],
         err_msg="fundamental adjoint flx_inf not verified.")
-    np.testing.assert_almost_equal(find_B2(xs)[0], 0.004184657328394975,
-        decimal=7, err_msg="B2 not verified.")
+    np.testing.assert_almost_equal(find_B2(xs, c=coefs[:32])[0],
+        0.004184657328394975, decimal=7, err_msg="B2 not verified.")

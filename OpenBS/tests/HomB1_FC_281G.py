@@ -120,36 +120,19 @@ def plot_eigenspectrum(B2_list):
     plt.show()
 
 
-def plot_gamma_func(B2):
-    y = [alpha(b) for b in B2]
-    z = [full_gamma(b) for b in B2]
-    s = [gamma(b) for b in B2]  # approximation
-    # print(B2)
-    # print(y)
-    fig, ax = plt.subplots()
-    ax.plot(B2, y, 'C0:', label=r'$\alpha$ (cm$^{-1}$)')
-    ax.plot(B2, z, 'C1-', label=r'$\gamma$')
-    ax.plot(B2, s, 'C2--', label=r'$\bar{\gamma}$')
-    ax.legend()
-    ax.set_xlabel(r'$B^2\: (\Sigma=1)$')
-    # ax.set_yscale('symlog')
-    # ax.set_xscale('symlog')
-    plt.show()
-
-
 if __name__ == "__main__":
 
     # calculate equidistant lethargy meshes
     # for N in [4, 8, 16, 32, 64, 128, 256]:
         # equidistant_lethargie_energy_mesh(N)
 
-    B2 = np.logspace(-3, 0, 100)
-    B2 = np.append(np.append(-B2[::-1], [0]), B2)
-    plot_gamma_func(B2)
+    # B2 = np.logspace(-3, 0, 100)
+    # B2 = np.append(np.append(-B2[::-1], [0]), B2)
+    # plot_gamma_func(B2)
 
-    sys.exit()
+    # sys.exit()
     # verify the implementation
-    MPOdata = readMPO(MPOFile)
+    MPOdata = readMPO(MPOFile, save=False, vrbs=True)
     print(MPOdata.keys())
     # print(MPOdata['BURN'])
     # print(MPOdata['ETFl'])

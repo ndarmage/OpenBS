@@ -809,10 +809,11 @@ def fill_microlibz_v2(microlibz, avaiso, avarea_addrzx_i, p, anis_pl1, ng, \
     for isoid, isonm in avaiso:
 
         # concentrations
-        microlibz[isonm]["conc"][p] = totisoconc[isoid]
+        mlib = microlibz[isonm]
+        mlib["conc"][p] = totisoconc[isoid]
 
         for reaid, reanm in avarea_addrzx_i[isoid].items():
-            reanm_l = reanm.lower()
+            reanm_l, rea = reanm.lower(), mlib[reanm]
             if "scat" in reanm_l:
                 # determine the first value in the TRANSPROFILE
                 TP_0 = transp_avails_addrzx_i[isoid]
@@ -823,69 +824,62 @@ def fill_microlibz_v2(microlibz, avaiso, avarea_addrzx_i, p, anis_pl1, ng, \
                 for ianis in range(anis_pl1):
                     pp[nb_params] = ianis
                     for idg in range(ng):
+                        scale = adr[idg] - fag[idg] - 1
                         for iag in range(ng):
 
                             # verify if scale in the adr
-                            scale = adr[idg] + iag - fag[idg]
+                            # scale = adr[idg] + iag - fag[idg]
+                            scale += 1
 
                             if adr[idg] <= scale < adr[idg + 1]:
                                 # state parameter for scattering
-                                # transpose the matrix to get a lower tringaular-like form
+                                # transpose the matrix to get a lower
+                                # tringaular-like form
                                 #pp[nb_params+1], pp[nb_params+2]= idg, iag
                                 pp[nb_paramsp1], pp[nb_paramsp2]= iag, idg
 
-                                microlibz[isonm][reanm][tuple(pp)] = \
+                                rea[tuple(pp)] = \
                                     xs[pos_avails_addrzx_i[isoid][reaid] + \
                                        adr[ng] * ianis + scale]
                             #else:
-                            # init to 0 the scattering matrix (already done by initdata!)
-                            #    microlibz[isonm][reanm][pada] = 0.
+                            # init to 0 the scattering matrix (already
+                            # done by initdata!)
+                            #    rea[pada] = 0.
 
             elif "diff" in reanm_l:
                 for ianis in range(anis_pl1):
                     #pa = np.append(p, [ianis])
                     pp[nb_params] = ianis
                     pos0 = pos_avails_addrzx_i[isoid][reaid] + ianis * ng
-                    microlibz[isonm][reanm][tuple(pp[:-2])] = xs[pos0 : pos0 + ng]
+                    rea[tuple(pp[:-2])] = xs[pos0 : pos0 + ng]
             else:
                 pos0 = pos_avails_addrzx_i[isoid][reaid]
-                microlibz[isonm][reanm][tuple(pp[:-3])] = xs[pos0 : pos0 + ng]
+                rea[tuple(pp[:-3])] = xs[pos0 : pos0 + ng]
 
         # determine the total xs
         pp[nb_params] = 0
-        # warning: remind that the sum is on axis 0 because the scattering
-        # matrices are lower triangular-like
-        ##scat0 = np.sum(microlibz[ isonm ][ "Scattering" ][tuple(pp[:-2])], axis=0)
-        ##microlibz[ isonm ][ "Total" ][tuple(pp[:-3])] = scat0
-        ## if "Nxcess" in microlibz[ isonm ]:
-        ##     microlibz[ isonm ][ "Total" ][tuple(pp[:-3])] -= \
-        ##         microlibz[ isonm ][ "Nxcess" ][tuple(pp[:-3])]
-        if "Diffusion" in microlibz[ isonm ]:
-            microlibz[ isonm ][ "Total" ][tuple(pp[:-3])] = \
-                microlibz[ isonm ][ "Diffusion" ][tuple(pp[:-2])]
-        elif "Scattering" in microlibz[ isonm ]:
-            scat0 = np.sum(
-                microlibz[ isonm ][ "Scattering" ][tuple(pp[:-2])],
-                           axis=0)
-            microlibz[ isonm ][ "Total" ][tuple(pp[:-3])] = scat0
-            if "Nxcess" in microlibz[ isonm ]:
-                microlibz[ isonm ][ "Total" ][tuple(pp[:-3])] -= \
-                    microlibz[ isonm ][ "Nxcess" ][tuple(pp[:-3])]
-        elif "Absorption" not in microlibz[ isonm ]:
+        if "Diffusion" in mlib:
+            mlib["Total"][tuple(pp[:-3])] = mlib["Diffusion"][tuple(pp[:-2])]
+        elif "Scattering" in mlib:
+            # warning: remind that the sum is on axis 0 because the
+            # scattering matrices are lower triangular-like
+            mlib["Total"][tuple(pp[:-3])] = scat0 = \
+                np.sum(mlib["Scattering"][tuple(pp[:-2])], axis=0)
+            if "Nxcess" in mlib:
+                mlib["Total"][tuple(pp[:-3])] -= mlib["Nxcess"][tuple(pp[:-3])]
+        elif "Absorption" not in mlib:
             raise RuntimeError("No Scattering data for " + isonm +
                 " and no Absorption either!\n -> Missing data for Total xs.")
-        if "Absorption" in microlibz[ isonm ]:
-            microlibz[ isonm ][ "Total" ][tuple(pp[:-3])] += \
-                microlibz[ isonm ][ "Absorption" ][tuple(pp[:-3])]
-        if (anis_pl1 >= 1) and ("Scattering" in microlibz[ isonm ]):
+        if "Absorption" in mlib:
+            mlib["Total"][tuple(pp[:-3])] += mlib["Absorption"][tuple(pp[:-3])]
+        if (anis_pl1 >= 1) and ("Scattering" in mlib):
             pp[nb_params] = 1
-            scat1 = one_third * np.sum(
-                microlibz[ isonm ][ "Scattering" ][tuple(pp[:-2])],
-                                       axis=0)
+            scat1 = np.sum(mlib["Scattering"][tuple(pp[:-2])], axis=0) \
+                  * one_third
         else:
             scat1 = np.zeros(ng)
-        microlibz[ isonm ]["DffConstant"][tuple(pp[:-3])] = one_third / \
-            ( microlibz[ isonm ]["Total"][tuple(pp[:-3])] - scat1 )
+        mlib["DffConstant"][tuple(pp[:-3])] = one_third / \
+            ( mlib["Total"][tuple(pp[:-3])] - scat1 )
     pass
 #-----------------------------------------------------------------
 
