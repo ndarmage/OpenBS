@@ -148,45 +148,63 @@ def power_iteration(A, toll=1.e-6, itnmax=10):
     return np.dot(f, np.dot(A, f)) / np.dot(f, f), f
 
 
-def find_B2_spectrum(xs, one_over_k=1., nb_eigs=None, g=coefs):
+def find_B2_spectrum(xs, one_over_k=1., nb_eigs=None, g=coefs,
+                     vrbs=False):
     "Find the B2 spectrum given the input arguments."
     st, ss, chi, nsf = xs  # unpack the macroscopic cross sections
-    # g1, g2, g3 = g
+    # N: polynomial order after truncation of the series expansion of
+    #    the gamma function
+    # G: nb. of energy groups
     N, G = len(g), st.size
+    if N <= 0:
+        raise ValueError('Invalid input array of coefs.')
+    GN = G * N
+    # consider cases with trailing zeros for terms of higher degrees
     while np.isclose(g[N-1], 0):
         N -= 1
-    print(g, N)
-    M = [None for i in range(N)]  # list of block matrices
+    # the first coefficient is always equal to 1, and so it does not
+    # appear in the coefs of g 
+    # N += 1  # ...to consider the actual polynomial order
+    # WARNING: N becomes indeed N-1 hereafter!
+    if vrbs:
+        print('Coefficients' + str(g))
+        print('Polynomial order %d' % (N + 1))
+    
+    # R: removal matrix
+    # C: transport matrix
     R, C = - np.array(ss[0,:,:], copy=True), \
            - np.array(ss[1,:,:], copy=True) / 3.
     np.fill_diagonal(R, st + R.diagonal())
+    np.fill_diagonal(C, st + C.diagonal())
     if abs(one_over_k) > 0:
         if chi.ndim == 1:
             ChiF = np.outer(chi, nsf)
         else:
             ChiF = np.dot(chi, nsf)
         R -= one_over_k * ChiF
-    np.fill_diagonal(C, st + C.diagonal())
-    Sm1 = 1. / st
-    Sm2 = np.diag(Sm1**2)
-    A1 = np.dot(np.diag(Sm1), R)
-    A2 = np.dot(Sm2, A1)
-    A3 = np.dot(Sm2, A2)
+    
+    Tm1 = 1. / st
+    Tm2, Tm1R = np.diag(Tm1**2), np.dot(np.diag(Tm1), R)
+    # A2 = np.dot(Tm2, A1)
+    # A3 = np.dot(Tm2, A2)
     # a1, a2, a3, a4 = np.dot(C, R), g1 * A1, g2 * A2, g3 * A3
     # a2 += np.identity(G) / 3.
-    GNm1, GN = G * (N - 1), G * N
-    M1, M2 = np.identity(GN), np.eye(GN, k=-G)
-    M[0] = np.dot(C, R)
-    M[1] = np.dot(np.diag(Sm1), R) * g[0] + np.identity(G) / 3.
-    for i in range(N):
-        if i > 1:
-            M[i] = np.dot(Sm2, M[i-1]) * g[i-1]
-        idx = np.arange(G * i, G*(i + 1))
-        M1[:G, idx] = M[i]
-    # M1[:G,:G], M1[:G,G:GNm1], M1[:G,GNm1:], M2[:G,GNm1:] = a1, a2, a3, -a4
-    M2[:G, -G:] = -np.dot(Sm2, M[-1]) * g[-1]
-    # M = np.dot(np.linalg.inv(M2), M1)
-    # return np.linalg.eigvals(M)
+    # M1, M2: matrices at LHS and RHS of the generalized eigenvalue
+    #         problem, respectively.
+    M1, M2 = np.identity(GN), np.eye(GN, k=-G if N > 1 else 0)
+    M1[:G,:G], M2[:G,:G] = np.dot(C, R), \
+        - (g[0] * Tm1R + np.identity(G) / 3.)
+    
+    TmnR = Tm1R
+    for i in range(N-2):
+        idx = np.arange(G) + G * (i + 2)
+        TmnR = np.dot(Tm2, TmnR)
+        M1[:G, idx] = g[i + 1] * TmnR
+    
+    if N > 1:
+        TmnR = np.dot(Tm2, TmnR)
+        M2[:G,-G:] = -g[-1] * TmnR
+    
     if nb_eigs is None:
         # get all eigen-pairs
         B2, flx = scipy.linalg.eig(M1, M2, check_finite=False)
@@ -194,7 +212,7 @@ def find_B2_spectrum(xs, one_over_k=1., nb_eigs=None, g=coefs):
         if nb_eigs == 1:
             B2, flx = power_iteration(np.dot(np.linalg.inv(M1), M2))
             B2, flx = 1. / B2, flx[:G]
-            if (flx < 0).all():
+            if np.all(flx < 0):
                 flx *= -1
             if not isfundamental(flx):
                 lg.debug("flx: " + str(flx))
@@ -227,7 +245,6 @@ def find_B2_asymptotes(xs, check_asymptotes=True):
     return real_B2_asympts
 
 
-#def find_B2(xs, B2M=1., k=1., nb=1):
 def find_B2(xs, nb=1, c=coefs):
     "Find the nb eigenvalues B2 as root of the degenerate system equations."
     # B2_asympts = find_B2_asymptotes(xs)
@@ -257,5 +274,5 @@ if __name__ == "__main__":
         err_msg="adjoint kinf not verified.")
     np.testing.assert_allclose(adj_flx_inf, [1.1913539, 1.50878553],
         err_msg="fundamental adjoint flx_inf not verified.")
-    np.testing.assert_almost_equal(find_B2(xs, c=coefs[:32])[0],
+    np.testing.assert_almost_equal(find_B2(xs, c=coefs[:3])[0],
         0.004184657328394975, decimal=7, err_msg="B2 not verified.")
