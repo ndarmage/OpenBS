@@ -208,6 +208,7 @@ def find_B2_spectrum(xs, one_over_k=1., nb_eigs=None, g=coefs,
     if nb_eigs is None:
         # get all eigen-pairs
         B2, flx = scipy.linalg.eig(M1, M2, check_finite=False)
+        flx = flx[:G,:]
     else:
         if nb_eigs == 1:
             B2, flx = power_iteration(np.dot(np.linalg.inv(M1), M2))

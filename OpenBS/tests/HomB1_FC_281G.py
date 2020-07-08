@@ -8,6 +8,13 @@ import os
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib import rc
+# possible settings
+# https://matplotlib.org/3.1.1/tutorials/introductory/customizing.html
+# rc('font',**{'family':'sans-serif','sans-serif':['Helvetica']})
+# rc('font',**{'family':'sans-serif','sans-serif':['Arial']})
+rc('font',**{'family':'serif', 'sans-serif':['Helvetica'], 'size': 12})
+rc('text', usetex=True)
 
 baseDir = os.path.join(os.getcwd(), "..")
 sys.path.append(baseDir)
@@ -18,8 +25,9 @@ from analyse_NData import *
 
 MPOFile = "UO2_325_AFA3G17_tdt_8G.hdf"
 # MPOFile = "UO2_325_AFA3G17_idt_2G_noB2.hdf"
-MPOFile = os.path.join(baseDir, "lib", MPOFile)
 
+ODir = os.path.join(baseDir, "..", "docs", "NET2020")
+FigDir = os.path.join(ODir, "figures")
 
 def get_xs_tuple(mxs, p, G=281, L=2, z=0, N=0):
     "G is nb. of groups, while L is the order of anisotropy (plus 1)."
@@ -107,17 +115,27 @@ def get_iso_set(mlib):
     return set().union(*map(set, [zxs.keys() for zxs in mlib]))
 
 
-def plot_eigenspectrum(B2_list):
+def plot_eigenspectrum(B2_array, filename=None):
+    markers = '12.+x*'  # '.sox+*'
     fig, ax = plt.subplots()
-    for i, B2 in enumerate(B2_list):
-        ax.scatter(B2.real, B2.imag, c='C%d' % i)
+    Nmax, _ = B2_array.shape
+    for i, B2 in enumerate(B2_array[::-1]):
+        # print(i, B2[:48-8*i])
+        ax.scatter(B2.real, B2.imag, marker=markers[i], c=('C%d' % i),
+                   # facecolors='none', edgecolors=('C%d' % i),
+                   label='N=%d' % (Nmax - i))
         # print(B2)
         # print(i, len(B2))
     ax.set_xlabel('$\Re({B^2})$')
     ax.set_ylabel('$\Im({B^2})$')
     ax.set_xscale('symlog')
     ax.set_yscale('symlog')
-    plt.show()
+    ax.legend(ncol=3)
+    if filename is None:
+        plt.show()
+    else:
+        fig.savefig(filename)
+    plt.close(fig)
 
 
 if __name__ == "__main__":
@@ -126,13 +144,9 @@ if __name__ == "__main__":
     # for N in [4, 8, 16, 32, 64, 128, 256]:
         # equidistant_lethargie_energy_mesh(N)
 
-    # B2 = np.logspace(-3, 0, 100)
-    # B2 = np.append(np.append(-B2[::-1], [0]), B2)
-    # plot_gamma_func(B2)
-
-    # sys.exit()
     # verify the implementation
-    MPOdata = readMPO(MPOFile, save=False, vrbs=True)
+    MPOdata = readMPO(os.path.join(baseDir, "lib", MPOFile),
+                      save=False, vrbs=True)
     print(MPOdata.keys())
     # print(MPOdata['BURN'])
     # print(MPOdata['ETFl'])
@@ -173,16 +187,22 @@ if __name__ == "__main__":
         err_msg="kinf not verified by compute_kpairs.")
         
     # g1, g2, g3 = 4. / 15., - 12. / 175., 92. / 2625.
-    B2_list = []
-    B2_g4, flx = find_B2_spectrum(xs, one_over_k=1., g=coefs)
-    B2_list.append(B2_g4)
-    B2_g3, flx = find_B2_spectrum(xs, one_over_k=1., g=coefs[:-1])
-    B2_list.append(B2_g3)
-    B2_g2, flx = find_B2_spectrum(xs, one_over_k=1., g=coefs[:-2])
-    B2_list.append(B2_g2)
-    B2_g1, flx = find_B2_spectrum(xs, one_over_k=1., g=coefs[:-3])
-    B2_list.append(B2_g1)
-    plot_eigenspectrum(B2_list)
+    Nmax = len(coefs)
+    print('Max poly degree is %d' % Nmax)
+    NmaxG = Nmax * ng
+    B2, flx = np.zeros((Nmax, NmaxG), dtype=np.cdouble), \
+              np.zeros((Nmax, ng, NmaxG), dtype=np.cdouble)
+    for i in range(Nmax):
+        # one_over_k=1.
+        n = ng * (i + 1)
+        B2[i,:n], flx[i,:,:n] = find_B2_spectrum(xs, g=coefs[:(i+1)])
+        idx = np.argsort(np.abs(B2[i,:n]))
+        B2[i,:n], flx[i,:,:n] = B2[i,:n][idx], flx[i,:,:n][:,idx]
+        # print(find_B2_spectrum(xs, g=coefs[:(i+1)], nb_eigs=1)[0])
+        # input(B2[i, :n])
+    fname = os.path.splitext(os.path.basename(MPOFile))[0] \
+          + '_eigspectrum.pdf'
+    plot_eigenspectrum(B2, os.path.join(FigDir, fname))
     
     # np.testing.assert_almost_equal(kinf, 1.1913539017168697, decimal=7,
         # err_msg="kinf not verified.")
