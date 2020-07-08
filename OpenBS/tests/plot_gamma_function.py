@@ -19,6 +19,10 @@ cwd = os.getcwd()
 sys.path.append(os.path.join(cwd, '..'))
 from HomogB1FlxCalc import alpha, gamma, gamma_approx, coefs
 
+from itertools import cycle
+lines = ["--", "-.", ":"]
+linecycler = cycle(lines)
+
 def plot_gamma(B2, coefs, filenm):
     # plots are valid only for S = 1.
     BoS = np.sqrt(abs(B2))
@@ -32,7 +36,7 @@ def plot_gamma(B2, coefs, filenm):
     ax.plot(B2, y, 'C0-', label=r'$\Sigma\alpha$')
     ax.plot(B2, z, 'C1-', label=r'$\gamma$', lw=2)
     for i, v in enumerate(s):
-        ax.plot(B2, v, 'C%d--' % (i+2),
+        ax.plot(B2, v, 'C%d' % (i+2) + next(linecycler),
                     label=r'$\gamma^{(%d)}$' % (i*2))
     ax.legend(ncol=4, prop={'size': 14}, handletextpad=0.4,
               columnspacing=.8)
