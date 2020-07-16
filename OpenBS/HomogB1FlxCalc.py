@@ -54,24 +54,45 @@ def gamma_approx(x, cs=coefs):
 
 
 def alpha(B2, S=1.):
-    "alpha function, see theory"
+    return Salpha(B2, S) / S
+
+
+def Salpha(B2, S=1.):
+    "alpha times Sigma function, see theory."
     BoS = np.sqrt(abs(B2)) / S
-    if np.isclose(B2, 0, atol=1e-6):
+    # print('B2', B2, np.isclose(B2, 0, atol=1e-5))
+    
+    a = np.where(np.isclose(BoS, 0, atol=1e-5),
         # default criteria for close proximity: rtol=1e-05, atol=1e-08
-        a = 1 - BoS**2 / 3 + BoS**4 / 5 - BoS**6 / 7 + BoS**8 / 9
-    elif B2 > 0:
-        a = np.arctan(BoS) / BoS  # 1 / np.tan(BoS) / BoS
-    else:
-        a = (np.log(1 + BoS) - np.log(1 - BoS)) / BoS / 2
-    return a / S
+        1 - BoS**2 / 3 + BoS**4 / 5 - BoS**6 / 7 + BoS**8 / 9,
+        np.arctan(BoS) / BoS if B2 > 0 else
+            np.log(abs((1 + BoS)/(1 - BoS))) / BoS / 2
+        )
+    
+    # the following works only in presence of single scalar values
+    # # if np.isclose(B2, 0, atol=1e-5):
+    # if np.isclose(BoS, 0, atol=1e-5):
+        # # default criteria for close proximity: rtol=1e-05, atol=1e-08
+        # a = 1 - BoS**2 / 3 + BoS**4 / 5 - BoS**6 / 7 + BoS**8 / 9
+    # elif B2 > 0:
+        # a = np.arctan(BoS) / BoS  # 1 / np.tan(BoS) / BoS
+    # else:
+        # a = np.log(abs((1 + BoS)/(1 - BoS))) / BoS / 2
+    # print('a', a)
+    return a
 
 
 def beta(B2, S=1.):
-    return (1 - alpha(B2, S) * S) / B2
+    return (1 - Salpha(B2, S)) / B2
 
 
 def gamma(B2, S=1.):
-    return alpha(B2, S) / beta(B2, S) / 3 / S
+    try:
+        n = len(S)
+    except:
+        n = 1
+    return np.ones(n) if np.isclose(B2, 0) else \
+           alpha(B2, S) / beta(B2, S) / 3 / S
 
 
 def extract_real_elements(v):
@@ -93,17 +114,26 @@ def get_R(st, ss, B2, adjoint=False, g=gamma_approx):
 
 def get_T(st, ss, B2, gamma_func=gamma_approx):
     "Compute the B2-dependent removal term."
-    w = 3. * gamma_func(B2 / st**2) * st
+    print('BoS', np.sqrt(abs(B2)) / st)
+    print('approx', gamma_approx(B2 / st**2))
+    print('gamma', gamma(B2, st))
+    input('ok')
+    if gamma_func == gamma_approx:
+        gf = gamma_func(B2 / st**2)
+    elif gamma_func == gamma:
+        gf = gamma_func(B2, st)
+    else:
+        raise ValueError('unknown input function gamma')
     R = - np.array(ss[1,:,:], copy=True)
-    np.fill_diagonal(R, w + R.diagonal())
+    np.fill_diagonal(R, 3. * gf * st + R.diagonal())
     return R
 
 
-def compute_deltak(B2, xs=None, k=1):
+def compute_deltak(B2, xs=None, k=1, f=gamma_approx):
     "Compute the k eigenvalue corresponding to the input B2."
     st, ss, chi, nsf = xs  # unpack the macroscopic cross sections
-    k_B2, flx = compute_kpairs(xs, B2)
-    if chi.ndim == 1:
+    k_B2, flx = compute_kpairs(xs, B2, g=f)
+    if chi.shape[1] == 1:
         dk = k_B2 - k
     else:
         dk = k_B2.max() - k
@@ -246,12 +276,22 @@ def find_B2_asymptotes(xs, check_asymptotes=True):
     return real_B2_asympts
 
 
-def find_B2(xs, nb=1, c=coefs):
+def find_B2(xs, nb=1, c=coefs, root_finding=False, one_over_k=1.):
     "Find the nb eigenvalues B2 as root of the degenerate system equations."
-    # B2_asympts = find_B2_asymptotes(xs)
-    # B2 = opt.brentq(compute_deltak, B2_asympts.max() + 1.e-10,
-    #                 B2M, args=(xs, k))
-    B2, flx = find_B2_spectrum(xs, nb_eigs=nb, g=c)
+    if root_finding:
+        # B2_asympts = find_B2_asymptotes(xs)
+        infplus = np.finfo(float).max
+        k = 1. / one_over_k \
+            if (one_over_k > 0) else infplus
+        flx, B2, eps = None, np.zeros(nb), 1.e-10
+        B2l, B2r = -1, 1e+6
+        # B2l, B2r = B2_asympts[0] + 1.e-10, 1e+6
+        for i in range(nb):
+            B2[i] = opt.brentq(compute_deltak, B2l, B2r,
+                               args=(xs, k, gamma))
+            # B2l, B2r = B2_asympts[i+1] + eps, B2_asympts[i] - eps
+    else:
+        B2, flx = find_B2_spectrum(xs, one_over_k, nb_eigs=nb, g=c)
     return B2, flx
 
 

@@ -804,7 +804,7 @@ def fill_microlibz_v2(microlibz, avaiso, avarea_addrzx_i, p, anis_pl1, ng, \
     nb_params, pp, gg = len(p), \
         np.append(p, np.zeros((3), dtype=type(p[0]))), 2 * ng
     nb_paramsp1, nb_paramsp2 = nb_params + 1, nb_params + 2
-    
+
     # browse available isotopes
     for isoid, isonm in avaiso:
 

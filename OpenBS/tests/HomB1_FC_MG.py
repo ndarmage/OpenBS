@@ -45,20 +45,21 @@ def get_xs_tuple(mxs, p, G=281, L=2, z=0, N=0):
         chi[g, :] = macroxszg(mxs, p, 'FissionSpectrum', z, g)
         nsf[:, g] = macroxszg(mxs, p, 'NuFission', z, g)
         for gg in range(G):
-            for l in range(L-1):
+            for l in range(L):
                 ss[l, g, gg] = macroxszg(mxs, p, 'Scattering',
                                          z, g, gg, l, True)
 
     np.testing.assert_allclose(np.sum(chi, axis=0), np.ones(N),
         err_msg="chi's not with unitary norm.", rtol=1.e-6)
+    
     if N==1:
         flx = np.dot(np.linalg.inv(np.diag(st)-ss[0,:,:]), chi)
         if np.any(flx < 0):
             print('any negative flux?\n' +str(flx))
-    print('check', st - np.sum(ss[0,:,:], axis=0) + nxe - sa)
+    
+    # print('check', st - np.sum(ss[0,:,:], axis=0) + nxe - sa)
     np.testing.assert_allclose(st, sa + np.sum(ss[0,:,:], axis=0) - nxe,
         err_msg="st and sa+ss-sx does not match.", rtol=1.e-6)
-    # print('chi', chi)
     
     # TRR = np.array([
         # RRizg(mxs, flxref[ig], p, "Absorption", i=None, z=0, g=ig, \
@@ -77,10 +78,10 @@ def get_xs_tuple(mxs, p, G=281, L=2, z=0, N=0):
     # print(
         # np.all(np.isclose(st - np.sum(ss[0,:,:], axis=0), sa))
         # )
-    if G < 20:
-        print(ss[0,:,:])
-        print(ss[1,:,:])
-    print('Shape of ss:', ss.shape)
+    # if G < 20:
+        # print(ss[0,:,:])
+        # print(ss[1,:,:])
+    # print('Shape of ss:', ss.shape)
 
     return st, ss, chi, nsf
 
@@ -144,6 +145,9 @@ if __name__ == "__main__":
     # for N in [4, 8, 16, 32, 64, 128, 256]:
         # equidistant_lethargie_energy_mesh(N)
 
+    calc_eigenspectrum = False
+    find_eigvs_one_by_one = True
+
     # verify the implementation
     MPOdata = readMPO(os.path.join(baseDir, "lib", MPOFile),
                       save=False, vrbs=True)
@@ -185,24 +189,31 @@ if __name__ == "__main__":
     # very coarse tolerance k=for unknown reasons of IDT...
     np.testing.assert_almost_equal(kinfc, kinf[p], decimal=3,
         err_msg="kinf not verified by compute_kpairs.")
-        
-    # g1, g2, g3 = 4. / 15., - 12. / 175., 92. / 2625.
-    Nmax = len(coefs)
-    print('Max poly degree is %d' % Nmax)
-    NmaxG = Nmax * ng
-    B2, flx = np.zeros((Nmax, NmaxG), dtype=np.cdouble), \
-              np.zeros((Nmax, ng, NmaxG), dtype=np.cdouble)
-    for i in range(Nmax):
-        # one_over_k=1.
-        n = ng * (i + 1)
-        B2[i,:n], flx[i,:,:n] = find_B2_spectrum(xs, g=coefs[:(i+1)])
-        idx = np.argsort(np.abs(B2[i,:n]))
-        B2[i,:n], flx[i,:,:n] = B2[i,:n][idx], flx[i,:,:n][:,idx]
-        # print(find_B2_spectrum(xs, g=coefs[:(i+1)], nb_eigs=1)[0])
-        # input(B2[i, :n])
-    fname = os.path.splitext(os.path.basename(MPOFile))[0] \
-          + '_eigspectrum.pdf'
-    plot_eigenspectrum(B2, os.path.join(FigDir, fname))
+    
+    if calc_eigenspectrum or False:
+        Nmax = len(coefs)
+        print('Max poly degree is %d' % Nmax)
+        NmaxG = Nmax * ng
+        B2, flx = np.zeros((Nmax, NmaxG), dtype=np.cdouble), \
+                  np.zeros((Nmax, ng, NmaxG), dtype=np.cdouble)
+        for i in range(Nmax):
+            # one_over_k=1.
+            n = ng * (i + 1)
+            B2[i,:n], flx[i,:,:n] = find_B2_spectrum(xs, g=coefs[:(i+1)])
+            idx = np.argsort(np.abs(B2[i,:n]))
+            B2[i,:n], flx[i,:,:n] = B2[i,:n][idx], flx[i,:,:n][:,idx]
+            # print(find_B2_spectrum(xs, g=coefs[:(i+1)], nb_eigs=1)[0])
+            idx = np.isclose(B2[i,:n].imag, 0)
+            input(B2[i,:n][idx])
+        fname = os.path.splitext(os.path.basename(MPOFile))[0] \
+              + '_eigspectrum.pdf'
+        plot_eigenspectrum(B2, os.path.join(FigDir, fname))
+    
+    if find_eigvs_one_by_one:
+        # real_B2_asympts = find_B2_asymptotes(xs, check_asymptotes=True)
+        # print(real_B2_asympts)
+        b2 = find_B2(xs, root_finding=True)
+        print(b2)
     
     # np.testing.assert_almost_equal(kinf, 1.1913539017168697, decimal=7,
         # err_msg="kinf not verified.")
