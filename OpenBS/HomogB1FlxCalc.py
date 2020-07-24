@@ -104,29 +104,64 @@ def isfundamental(flx):
     return ((flx > 0).all() or (flx < 0).all())
 
 
-def get_R(st, ss, B2, adjoint=False, g=gamma_approx):
-    "Compute the B2-dependent removal term."
-    R = get_T(st, ss, B2, gamma_func=g)
-    R = B2 * np.linalg.inv(R) - ss[0,:,:]
+def get_Hr(st, ss, B2, adjoint=False, g=gamma_approx):
+    "Compute the B2-dependent removal term minus isotropic scattering."
+    R = B2 * np.linalg.inv(
+        get_G(st, ss, B2, gamma_func=g)
+                          ) - ss[0,:,:]
     np.fill_diagonal(R, st + R.diagonal())
     return (R.conj().T if adjoint else R)
 
 
-def get_T(st, ss, B2, gamma_func=gamma_approx):
-    "Compute the B2-dependent removal term."
-    print('BoS', np.sqrt(abs(B2)) / st)
-    print('approx', gamma_approx(B2 / st**2))
-    print('gamma', gamma(B2, st))
-    input('ok')
+def get_H(xs, B2=0, adjoint=False, g=gamma_approx, one_over_k=1.):
+    "Compute the Boltzman operator for the conservation equation."
+    st, ss, chi, nsf = xs  # unpack the macroscopic cross sections
+    P = np.outer(chi, nsf) if chi.ndim == 1 else np.dot(chi, nsf)
+    if adjoint:
+        P = P.transpose()
+    H = get_Hr(st, ss, B2, adjoint, g) - one_over_k * P
+    return H  # as a function of B2
+
+
+def get_R(xs, one_over_k=1.):
+    "Compute the removal matrix."
+    st, ss, chi, nsf = xs  # unpack the macroscopic cross sections
+    R = - np.array(ss[0,:,:], copy=True)
+    np.fill_diagonal(R, st + R.diagonal())
+    if abs(one_over_k) > 0:
+        if chi.ndim == 1:
+            ChiF = np.outer(chi, nsf)
+        else:
+            ChiF = np.dot(chi, nsf)
+        R -= one_over_k * ChiF
+    return R
+
+
+def get_Hprime(xs, B2=0, one_over_k=1.):
+    "Compute the first derivitaive of the transport operator on B2."
+    st, ss, chi, nsf = xs  # unpack the macroscopic cross sections
+    G = st.size
+    f, g, R = Salpha(B2, st), gamma(B2, st), get_R(xs, one_over_k)
+    # gp = 
+    Hp = np.dot(np.diag(st * gp), R)
+    np.fill_diagonal(Hp, np.ones(G) / 3)
+
+
+def get_G(st, ss, B2, gamma_func=gamma_approx):
+    "Compute the B2-dependent operator term of the current equation."
+    # print('BoS', np.sqrt(abs(B2)) / st)
+    # print('approx', gamma_approx(B2 / st**2))
+    # print('gamma', gamma(B2, st))
+    # input('ok')
     if gamma_func == gamma_approx:
         gf = gamma_func(B2 / st**2)
     elif gamma_func == gamma:
         gf = gamma_func(B2, st)
     else:
         raise ValueError('unknown input function gamma')
-    R = - np.array(ss[1,:,:], copy=True)
-    np.fill_diagonal(R, 3. * gf * st + R.diagonal())
-    return R
+    G = - np.array(ss[1,:,:], copy=True)
+    np.fill_diagonal(G, 3. * gf * st + G.diagonal())
+    return G
 
 
 def compute_deltak(B2, xs=None, k=1, f=gamma_approx):
@@ -146,7 +181,7 @@ def compute_kpairs(xs, B2=0., adjoint=False, g=gamma_approx):
     # get the fundamental eigenpair assuming a single family of fissiles
     if adjoint:
         chi, nsf = nsf.T, chi.T
-    flx = np.dot(np.linalg.inv(get_R(st, ss, B2, adjoint, g)), chi)
+    flx = np.dot(np.linalg.inv(get_Hr(st, ss, B2, adjoint, g)), chi)
     k = np.dot(nsf, flx)
     if k.size > 1:
         # calculate the matrix whose eigenvalues are the k's and whose
@@ -202,16 +237,9 @@ def find_B2_spectrum(xs, one_over_k=1., nb_eigs=None, g=coefs,
     
     # R: removal matrix
     # C: transport matrix
-    R, C = - np.array(ss[0,:,:], copy=True), \
-           - np.array(ss[1,:,:], copy=True) / 3.
-    np.fill_diagonal(R, st + R.diagonal())
+    R = get_R(xs, one_over_k)
+    C = - np.array(ss[1,:,:], copy=True) / 3.
     np.fill_diagonal(C, st + C.diagonal())
-    if abs(one_over_k) > 0:
-        if chi.ndim == 1:
-            ChiF = np.outer(chi, nsf)
-        else:
-            ChiF = np.dot(chi, nsf)
-        R -= one_over_k * ChiF
     
     Tm1 = 1. / st
     Tm2, Tm1R = np.diag(Tm1**2), np.dot(np.diag(Tm1), R)
@@ -257,18 +285,19 @@ def find_B2_spectrum(xs, one_over_k=1., nb_eigs=None, g=coefs,
     return B2, flx
 
 
-def find_B2_asymptotes(xs, check_asymptotes=True):
+def find_B2_asymptotes(xs, cs=coefs, check_asymptotes=True):
     "Find the B2 asymptotes leading to infinite k (on the real axis)."
-    B2_asympts, flx = find_B2_spectrum(xs, one_over_k=0.)
+    B2_asympts, flx = find_B2_spectrum(xs, g=cs, one_over_k=0.)
     real_B2_asympts = extract_real_elements(B2_asympts)
-    flx = flx[:, (B2_asympts.real() == real_B2_asympts) and
-                 np.isclose(B2_asympts, 0)]
+    flx = flx[:, np.isclose(B2_asympts.imag, 0)]
+    idx = abs(real_B2_asympts).argsort()
+    real_B2_asympts, flx = real_B2_asympts[idx], flx[:, idx]
     if check_asymptotes:
         st, ss, chi, nsf = xs  # unpack the macroscopic cross sections
         G = st.size
         lg.debug("Real asymptotes: " + str(real_B2_asympts))
         for b2 in real_B2_asympts:
-            det_R = np.linalg.det(get_R(st, ss, b2))
+            det_R = np.linalg.det(get_Hr(st, ss, b2))
             lg.debug("det(R(B2 = {:<+13.6g})) = {:>13.6e}".format(b2,
                                                                  det_R))
             np.testing.assert_almost_equal(0, det_R,
@@ -279,17 +308,24 @@ def find_B2_asymptotes(xs, check_asymptotes=True):
 def find_B2(xs, nb=1, c=coefs, root_finding=False, one_over_k=1.):
     "Find the nb eigenvalues B2 as root of the degenerate system equations."
     if root_finding:
-        # B2_asympts = find_B2_asymptotes(xs)
+        B2_asympts = find_B2_asymptotes(xs, c)
+        # sort
+        # idx = B2_asympts.argsort() & (B2_asympts < 0)
+        # B2_asympts = B2_asympts[idx]
+        # input(B2_asympts)
         infplus = np.finfo(float).max
         k = 1. / one_over_k \
             if (one_over_k > 0) else infplus
         flx, B2, eps = None, np.zeros(nb), 1.e-10
-        B2l, B2r = -1, 1e+6
-        # B2l, B2r = B2_asympts[0] + 1.e-10, 1e+6
+        B2l, B2r = B2_asympts[abs(B2_asympts).argmin()] + 1.e-4, 1e+6
+        # WARNING: this asymptotes are not the ones of the original
+        # problem because of the rational approximation
         for i in range(nb):
             B2[i] = opt.brentq(compute_deltak, B2l, B2r,
                                args=(xs, k, gamma))
-            # B2l, B2r = B2_asympts[i+1] + eps, B2_asympts[i] - eps
+            print('Search segment is [%g, %g], eig nb. %3d = %g' % 
+                  (B2l, B2r, i + 1, B2[i]))
+            B2l, B2r = B2_asympts[i+1] + eps, B2_asympts[i] - eps
     else:
         B2, flx = find_B2_spectrum(xs, one_over_k, nb_eigs=nb, g=c)
     return B2, flx
@@ -316,4 +352,4 @@ if __name__ == "__main__":
     np.testing.assert_allclose(adj_flx_inf, [1.1913539, 1.50878553],
         err_msg="fundamental adjoint flx_inf not verified.")
     np.testing.assert_almost_equal(find_B2(xs, c=coefs[:3])[0],
-        0.004184657328394975, decimal=7, err_msg="B2 not verified.")
+        0.004184657328394975, decimal=16, err_msg="B2 not verified.")

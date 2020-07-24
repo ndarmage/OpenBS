@@ -145,7 +145,7 @@ if __name__ == "__main__":
     # for N in [4, 8, 16, 32, 64, 128, 256]:
         # equidistant_lethargie_energy_mesh(N)
 
-    calc_eigenspectrum = False
+    calc_eigenspectrum = True
     find_eigvs_one_by_one = True
 
     # verify the implementation
@@ -190,7 +190,7 @@ if __name__ == "__main__":
     np.testing.assert_almost_equal(kinfc, kinf[p], decimal=3,
         err_msg="kinf not verified by compute_kpairs.")
     
-    if calc_eigenspectrum or False:
+    if calc_eigenspectrum:
         Nmax = len(coefs)
         print('Max poly degree is %d' % Nmax)
         NmaxG = Nmax * ng
@@ -204,16 +204,16 @@ if __name__ == "__main__":
             B2[i,:n], flx[i,:,:n] = B2[i,:n][idx], flx[i,:,:n][:,idx]
             # print(find_B2_spectrum(xs, g=coefs[:(i+1)], nb_eigs=1)[0])
             idx = np.isclose(B2[i,:n].imag, 0)
-            input(B2[i,:n][idx])
-        fname = os.path.splitext(os.path.basename(MPOFile))[0] \
-              + '_eigspectrum.pdf'
-        plot_eigenspectrum(B2, os.path.join(FigDir, fname))
+            print('i=%2d, fund. B2 = %g' % (i, B2[i,:n][idx][0]))
+        # fname = os.path.splitext(os.path.basename(MPOFile))[0] \
+              # + '_eigspectrum.pdf'
+        # plot_eigenspectrum(B2, os.path.join(FigDir, fname))
     
     if find_eigvs_one_by_one:
         # real_B2_asympts = find_B2_asymptotes(xs, check_asymptotes=True)
         # print(real_B2_asympts)
-        b2 = find_B2(xs, root_finding=True)
-        print(b2)
+        b2, _ = find_B2(xs, root_finding=True, nb=2)
+        print(' + solution by root finder:\n' + str(b2))
     
     # np.testing.assert_almost_equal(kinf, 1.1913539017168697, decimal=7,
         # err_msg="kinf not verified.")
