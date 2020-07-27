@@ -60,13 +60,15 @@ def alpha(B2, S=1.):
 def Salpha(B2, S=1.):
     "alpha times Sigma function, see theory."
     BoS = np.sqrt(abs(B2)) / S
+    # B2oS2 = B2 / S**2
     # print('B2', B2, np.isclose(B2, 0, atol=1e-5))
     
     a = np.where(np.isclose(BoS, 0, atol=1e-5),
         # default criteria for close proximity: rtol=1e-05, atol=1e-08
         1 - BoS**2 / 3 + BoS**4 / 5 - BoS**6 / 7 + BoS**8 / 9,
-        np.arctan(BoS) / BoS if B2 > 0 else
-            np.log(abs((1 + BoS)/(1 - BoS))) / BoS / 2
+        # 1 - B2oS2 / 3 + B2oS2**2 / 5 - B2oS2**3 / 7 + B2oS2**4 / 9,
+        (np.arctan(BoS) / BoS) if B2 > 0 else
+            (np.log(abs((1 + BoS)/(1 - BoS))) / BoS / 2)
         )
     
     # the following works only in presence of single scalar values
@@ -82,6 +84,24 @@ def Salpha(B2, S=1.):
     return a
 
 
+def Salpha_prime(B2, S=1.):
+    "Derivative of the alpha times Sigma function on B2."
+    BoS, S2 = np.sqrt(abs(B2)) / S, S**2
+    
+    # print('B2', B2, np.isclose(B2, 0, atol=1e-5))
+    a = Salpha(B2, S)
+    
+    ap = np.where(np.isclose(BoS, 0, atol=1e-5),
+        # default criteria for close proximity: rtol=1e-05, atol=1e-08
+        -(1 / 3 - 2 / 5 *BoS**2 + 3 / 7 * BoS**4 - 4 / 9 * BoS**6
+          + 5 / 11 * BoS**8) / S2, (- a + (
+            (1 / (1 + BoS**2)) if B2 > 0 else
+            (abs((1 - BoS)/(1 + BoS)) * np.sign(1 - BoS) / (1 - BoS)**2)
+               )) / (2 * B2)
+        )
+    return ap
+
+
 def beta(B2, S=1.):
     return (1 - Salpha(B2, S)) / B2
 
@@ -94,6 +114,15 @@ def gamma(B2, S=1.):
     return np.ones(n) if np.isclose(B2, 0) else \
            alpha(B2, S) / beta(B2, S) / 3 / S
 
+
+def gamma_prime(B2, S=1.):
+    "First derivative of the gamma function (without approximation)."
+    gp = 4 / 15
+    if not np.isclose(B2, 0):
+        f, fp = Salpha(B2, S), Salpha_prime(B2, S)
+        gp = gamma(B2, S) * (1 / B2 + fp / f / (1 - f))
+    return gp
+    
 
 def extract_real_elements(v):
     return v[np.isclose(v.imag, 0)].real
@@ -145,6 +174,7 @@ def get_Hprime(xs, B2=0, one_over_k=1.):
     # gp = 
     Hp = np.dot(np.diag(st * gp), R)
     np.fill_diagonal(Hp, np.ones(G) / 3)
+    return Hp
 
 
 def get_G(st, ss, B2, gamma_func=gamma_approx):

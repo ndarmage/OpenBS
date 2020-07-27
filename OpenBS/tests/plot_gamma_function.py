@@ -17,7 +17,8 @@ rc('text', usetex=True)
 
 cwd = os.getcwd()
 sys.path.append(os.path.join(cwd, '..'))
-from HomogB1FlxCalc import alpha, gamma, gamma_approx, coefs
+from HomogB1FlxCalc import alpha, gamma, gamma_approx, coefs, \
+                           gamma_prime, Salpha, Salpha_prime
 
 from itertools import cycle
 lines = ["--", "-.", ":"]
@@ -48,6 +49,29 @@ def plot_gamma(B2, coefs, filenm):
     # plt.show()
     fig.savefig(filenm)
 
+
+def plot_gamma_prime(B2, coefs, filenm):
+    # plots are valid only for S = 1.
+    BoS = np.sqrt(abs(B2))
+    z = [gamma(v) for v in B2]
+    s = [gamma_prime(v) for v in B2]
+    # print('B2', B2)
+    # print('z', z)
+    # print('zp', s)
+    fig, ax = plt.subplots()
+    ax.plot(B2, z, 'C0-', label=r'$\gamma$', lw=2)
+    ax.plot(B2, s, 'C1-', label=r"$\gamma'$", lw=2)
+    ax.legend(ncol=4, prop={'size': 14}, handletextpad=0.4,
+              columnspacing=.8)
+    ax.set_xlabel(r'$x^2$', fontsize=14)
+    # ax.set_xlabel(r'$(| B | / \Sigma)^2$', fontsize=14)
+    # ax.set_xlabel(r'$\lvert B \rvert / \Sigma$')
+    # ax.set_yscale('log')
+    # ax.set_xscale('symlog')
+    plt.show()
+    # fig.savefig(filenm)
+
+
 if __name__ == "__main__":
 
     # functions depend on the ratio B / S, with different branches
@@ -55,6 +79,9 @@ if __name__ == "__main__":
     # set the following expected ranges for B2.     
     B2 = np.logspace(-3, 0, 100)
     B2 = np.append(np.append(-B2[::-1], [0]), B2)
+    # filenm = os.path.join("..", "..", "docs", "NET2020",
+                          # "figures", "gamma_poly.pdf")
+    # plot_gamma(B2, coefs, filenm)
     filenm = os.path.join("..", "..", "docs", "NET2020",
-                          "figures", "gamma_poly.pdf")
-    plot_gamma(B2, coefs, filenm)
+                          "figures", "gamma_prime.pdf")
+    plot_gamma_prime(B2, coefs, filenm)
