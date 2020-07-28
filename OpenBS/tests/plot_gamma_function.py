@@ -38,7 +38,7 @@ def plot_gamma(B2, coefs, filenm):
     ax.plot(B2, z, 'C1-', label=r'$\gamma$', lw=2)
     for i, v in enumerate(s):
         ax.plot(B2, v, 'C%d' % (i+2) + next(linecycler),
-                    label=r'$\gamma^{(%d)}$' % (i*2))
+                label=r'$\gamma^{(%d)}$' % (i*2))
     ax.legend(ncol=4, prop={'size': 14}, handletextpad=0.4,
               columnspacing=.8)
     ax.set_xlabel(r'$x^2$', fontsize=14)
@@ -77,7 +77,7 @@ if __name__ == "__main__":
     # functions depend on the ratio B / S, with different branches
     # according to the sign of B2; hence we fix S equal to 1 and
     # set the following expected ranges for B2.     
-    B2 = np.logspace(-3, 0, 100)
+    B2 = np.logspace(-3, 0, 1000)
     B2 = np.append(np.append(-B2[::-1], [0]), B2)
     # filenm = os.path.join("..", "..", "docs", "NET2020",
                           # "figures", "gamma_poly.pdf")

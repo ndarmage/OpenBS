@@ -67,8 +67,8 @@ def Salpha(B2, S=1.):
         # default criteria for close proximity: rtol=1e-05, atol=1e-08
         1 - BoS**2 / 3 + BoS**4 / 5 - BoS**6 / 7 + BoS**8 / 9,
         # 1 - B2oS2 / 3 + B2oS2**2 / 5 - B2oS2**3 / 7 + B2oS2**4 / 9,
-        (np.arctan(BoS) / BoS) if B2 > 0 else
-            (np.log(abs((1 + BoS)/(1 - BoS))) / BoS / 2)
+        np.arctan(BoS) / BoS if B2 > 0 else
+            np.log(abs((1 + BoS)/(1 - BoS))) / BoS / 2
         )
     
     # the following works only in presence of single scalar values
@@ -112,12 +112,13 @@ def gamma(B2, S=1.):
     except:
         n = 1
     return np.ones(n) if np.isclose(B2, 0) else \
-           alpha(B2, S) / beta(B2, S) / 3 / S
+        np.where(np.isclose(B2, -S**2), 1 / 3,
+                     alpha(B2, S) / beta(B2, S) / 3 / S)
 
 
 def gamma_prime(B2, S=1.):
     "First derivative of the gamma function (without approximation)."
-    gp = 4 / 15
+    gp = 4 / 15 / S**2
     if not np.isclose(B2, 0):
         f, fp = Salpha(B2, S), Salpha_prime(B2, S)
         gp = gamma(B2, S) * (1 / B2 + fp / f / (1 - f))
@@ -133,7 +134,7 @@ def isfundamental(flx):
     return ((flx > 0).all() or (flx < 0).all())
 
 
-def get_Hr(st, ss, B2, adjoint=False, g=gamma_approx):
+def get_Hr(st, ss, B2, adjoint=False, g=gamma):
     "Compute the B2-dependent removal term minus isotropic scattering."
     R = B2 * np.linalg.inv(
         get_G(st, ss, B2, gamma_func=g)
@@ -142,7 +143,7 @@ def get_Hr(st, ss, B2, adjoint=False, g=gamma_approx):
     return (R.conj().T if adjoint else R)
 
 
-def get_H(xs, B2=0, adjoint=False, g=gamma_approx, one_over_k=1.):
+def get_H(xs, B2=0, adjoint=False, g=gamma, one_over_k=1.):
     "Compute the Boltzman operator for the conservation equation."
     st, ss, chi, nsf = xs  # unpack the macroscopic cross sections
     P = np.outer(chi, nsf) if chi.ndim == 1 else np.dot(chi, nsf)
@@ -159,22 +160,33 @@ def get_R(xs, one_over_k=1.):
     np.fill_diagonal(R, st + R.diagonal())
     if abs(one_over_k) > 0:
         if chi.ndim == 1:
-            ChiF = np.outer(chi, nsf)
+            P = np.outer(chi, nsf)
         else:
-            ChiF = np.dot(chi, nsf)
-        R -= one_over_k * ChiF
+            P = np.dot(chi, nsf)
+        R -= one_over_k * P
     return R
 
 
-def get_Hprime(xs, B2=0, one_over_k=1.):
-    "Compute the first derivitaive of the transport operator on B2."
+def get_T0(xs, B2=0., one_over_k=1.):
+    """Compute the transport operator on B2 whose form is used for the
+    inverse iterations search."""
     st, ss, chi, nsf = xs  # unpack the macroscopic cross sections
     G = st.size
-    f, g, R = Salpha(B2, st), gamma(B2, st), get_R(xs, one_over_k)
-    # gp = 
-    Hp = np.dot(np.diag(st * gp), R)
-    np.fill_diagonal(Hp, np.ones(G) / 3)
-    return Hp
+    T = np.dot(np.diag(st * gamma(B2, st)) - ss[1,:,:],
+               get_R(xs, one_over_k))
+    np.fill_diagonal(T, np.full(G, B2 / 3))
+    return T
+
+
+def get_Tprime(xs, B2=0, one_over_k=1.):
+    """Compute the first derivitaive of the transport operator on B2.
+    The form of the Boltzmann eqn is the one used for the inverse
+    iterations search."""
+    st = xs[0]
+    G = st.size
+    Tp = np.dot(np.diag(st * gamma_prime(B2, st)), get_R(xs, one_over_k))
+    np.fill_diagonal(Tp, np.full(G, 1 / 3))
+    return Tp
 
 
 def get_G(st, ss, B2, gamma_func=gamma_approx):
@@ -335,27 +347,66 @@ def find_B2_asymptotes(xs, cs=coefs, check_asymptotes=True):
     return real_B2_asympts
 
 
-def find_B2(xs, nb=1, c=coefs, root_finding=False, one_over_k=1.):
-    "Find the nb eigenvalues B2 as root of the degenerate system equations."
+def find_B2(xs, nb=1, c=coefs, root_finding=False, one_over_k=1.,
+            with_approx=False):
+    """Find the nb eigenvalues B2 as root of the degenerate system
+    equations."""
     if root_finding:
-        B2_asympts = find_B2_asymptotes(xs, c)
-        # sort
-        # idx = B2_asympts.argsort() & (B2_asympts < 0)
-        # B2_asympts = B2_asympts[idx]
-        # input(B2_asympts)
-        infplus = np.finfo(float).max
-        k = 1. / one_over_k \
-            if (one_over_k > 0) else infplus
-        flx, B2, eps = None, np.zeros(nb), 1.e-10
-        B2l, B2r = B2_asympts[abs(B2_asympts).argmin()] + 1.e-4, 1e+6
-        # WARNING: this asymptotes are not the ones of the original
-        # problem because of the rational approximation
-        for i in range(nb):
-            B2[i] = opt.brentq(compute_deltak, B2l, B2r,
-                               args=(xs, k, gamma))
-            print('Search segment is [%g, %g], eig nb. %3d = %g' % 
-                  (B2l, B2r, i + 1, B2[i]))
-            B2l, B2r = B2_asympts[i+1] + eps, B2_asympts[i] - eps
+        if with_approx:
+            B2_asympts = find_B2_asymptotes(xs, c)
+            # idx = B2_asympts.argsort() & (B2_asympts < 0)  # sort
+            # B2_asympts = B2_asympts[idx]
+            # input(B2_asympts)
+            infplus = np.finfo(float).max
+            k = 1. / one_over_k \
+                if (one_over_k > 0) else infplus
+            flx, B2, eps = None, np.zeros(nb), 1.e-10
+            idx = abs(B2_asympts).argmin()
+            B2l, B2r = B2_asympts[idx] + 1.e-4, 1e+6
+            # WARNING: this asymptotes are not the ones of the original
+            # problem because of the rational approximation
+            for i in range(nb):
+                B2[i] = opt.brentq(compute_deltak, B2l, B2r,
+                                   args=(xs, k, gamma))
+                print('Search segment is [%g, %g], eig nb. %3d = %g' % 
+                      (B2l, B2r, i + 1, B2[i]))
+                B2l, B2r = B2_asympts[i+1] + eps, B2_asympts[i] - eps
+        else:
+            # Inverse iterations to solve the non-linear eigen-problem
+            G = xs[0].size  # nb. of groups from st
+            toll = 1.e-6
+            flx, B2, err_B2, it = np.ones(G), 0, 1.e+20, 0
+            v = np.full(G, 1 / np.sum(flx))
+            print("{:^5s}{:^13s}{:^13s}{:^13s}".format(
+                'Its.', 'B2', 'B2-err', 'flx-err'))
+            
+            deriv = lambda x, eps=1.e-7: (
+                get_T0(xs, x, one_over_k) - 
+                get_T0(xs, x + eps, one_over_k) ) / eps
+            
+            while abs(err_B2) > toll:
+                it += 1
+                flx_old, B2_old = flx, B2
+                # C = deriv(B2_old)
+                # D = get_Tprime(xs, B2_old, one_over_k)
+                # print('C', C)
+                # print('D', D)
+                # input('ok')
+                # Hprime = get_Tprime(xs, B2_old, one_over_k)
+                Hprime = deriv(B2_old)
+                flx = np.linalg.solve(
+                    get_T0(xs, B2_old, one_over_k),
+                    np.dot(Hprime, flx)
+                    )
+                wnorm = np.dot(v, flx)
+                B2 -= np.dot(v, flx_old) / wnorm
+                flx /= wnorm
+                err_B2 = B2_old - B2
+                if abs(B2) > 0:
+                    err_B2 /= B2
+                err_flx = max(abs(1 - flx_old / flx))
+                print(("{:>4d} " + 3*"{:13.6}").format(
+                    it, B2, err_B2, err_flx)); input('wait...')
     else:
         B2, flx = find_B2_spectrum(xs, one_over_k, nb_eigs=nb, g=c)
     return B2, flx
