@@ -15,6 +15,8 @@ function gamma.
 .. note:: The coefficients of the polynomial approximations for gamma
           are obtained by the python package sympy (series function).
 
+.. note:: Cross sections are prepared by APOLLO3 which integrates
+          the factor (2n+1) into the scattering moments of order n.
 
 References
 ==========
@@ -70,17 +72,7 @@ def Salpha(B2, S=1.):
         np.arctan(BoS) / BoS if B2 > 0 else
             np.log(abs((1 + BoS)/(1 - BoS))) / BoS / 2
         )
-    
-    # the following works only in presence of single scalar values
-    # # if np.isclose(B2, 0, atol=1e-5):
-    # if np.isclose(BoS, 0, atol=1e-5):
-        # # default criteria for close proximity: rtol=1e-05, atol=1e-08
-        # a = 1 - BoS**2 / 3 + BoS**4 / 5 - BoS**6 / 7 + BoS**8 / 9
-    # elif B2 > 0:
-        # a = np.arctan(BoS) / BoS  # 1 / np.tan(BoS) / BoS
-    # else:
-        # a = np.log(abs((1 + BoS)/(1 - BoS))) / BoS / 2
-    # print('a', a)
+
     return a
 
 
@@ -172,8 +164,8 @@ def get_T0(xs, B2=0., one_over_k=1.):
     inverse iterations search."""
     st, ss, chi, nsf = xs  # unpack the macroscopic cross sections
     G = st.size
-    # print(('B2 = %g, gamma = ' % B2) +str(gamma(B2, st)))
-    T = np.dot(np.diag(st * gamma(B2, st)) - ss[1,:,:],
+    # remind that ss_1 contains still the factor 3
+    T = np.dot(np.diag(st * gamma(B2, st)) - ss[1,:,:] / 3,
                get_R(xs, one_over_k))
     np.fill_diagonal(T, T.diagonal() + B2 * np.ones(G) / 3)
     return T
