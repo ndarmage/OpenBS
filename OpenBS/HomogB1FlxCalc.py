@@ -375,49 +375,54 @@ def find_B2(xs, nb=1, c=coefs, root_finding=False, one_over_k=1.,
         else:
             # Inverse iterations to solve the non-linear eigen-problem
             G = xs[0].size  # nb. of groups from st
-            toll = 1.e-6
-            flx, B2, err_B2, it = np.ones(G), 0, 1.e+20, 0
+            toll = 1.e-10
+            flx, B2, it = np.ones(G), 0.002834, 0
+            err_B2 = err_flx = 1.e+20
             v = np.full(G, 1 / np.sum(flx))
-            print("{:^5s}{:^13s}{:^13s}{:^13s}".format(
-                'Its.', 'B2', 'B2-err', 'flx-err'))
+            print("{:^5s}{:^13s}{:^13s}{:^13s}{:^13s}".format(
+                'Its.', 'k', 'B2', 'B2-err', 'flx-err'))
             
-            deriv = lambda x, eps=1.e-7: (
-                get_T0(xs, x, one_over_k) - 
-                get_T0(xs, x + eps, one_over_k) ) / eps
+            deriv = lambda x, eps=1.e-6, oOk=one_over_k: (
+                get_T0(xs, x + eps, oOk) - get_T0(xs, x, oOk)
+                                                         ) / eps
             
-            print("test")
-            print(np.linalg.det(get_T0(xs, 0., one_over_k)))
-            print(np.linalg.det(get_T0(xs, 0.00283, one_over_k)))
-            print(np.linalg.det(get_T0(xs, 0.002833, one_over_k)))
-            print(np.linalg.det(get_T0(xs, 0.00283304, one_over_k)))
-            print(np.linalg.det(get_T0(xs, 0.002834, one_over_k)))
-            print(np.linalg.det(get_T0(xs, 0.00284, one_over_k)))
-            print(np.linalg.det(get_T0(xs, 0.003, one_over_k)))
-            input(np.linalg.det(get_T0(xs, 0.00283304, one_over_k)))
+            # print("test")
+            # print(np.linalg.det(get_T0(xs, -0.005, one_over_k)))
+            # print(np.linalg.det(get_T0(xs, 0., one_over_k)))
+            # print(np.linalg.det(get_T0(xs, 0.00283304, one_over_k)))
+            # print(np.linalg.det(get_T0(xs, 0.005, one_over_k)))
+            # print(np.linalg.det(get_T0(xs, 0.01, one_over_k)))
+            # print(np.linalg.det(get_T0(xs, 0.1, one_over_k)))
+            # input(np.linalg.det(get_T0(xs, 0.2, one_over_k)))
+            
+            k, _ = compute_kpairs(xs, B2, adjoint=False, g=gamma)
+            print(("{:>4d} " + 4*"{:13.6}").format(
+                  it, k, B2, err_B2, err_flx))
             
             while abs(err_B2) > toll:
                 it += 1
-                flx_old, B2_old = flx, B2
+                flx_old, B2_old, k_old = flx, B2, k
+                # to verify get_Tprime
                 # C = deriv(B2_old)
                 # D = get_Tprime(xs, B2_old, one_over_k)
-                # print('C', C)
-                # print('D', D)
-                # input('ok')
-                # Hprime = get_Tprime(xs, B2_old, one_over_k)
-                Hprime = deriv(B2_old)
+                # print('C', C); print('D', D); input('check')
+                Hprime = get_Tprime(xs, B2_old, one_over_k)
                 flx = np.linalg.solve(
                     get_T0(xs, B2_old, one_over_k),
-                    np.dot(Hprime, flx)
+                    np.dot(Hprime, flx_old)
                     )
                 wnorm = np.dot(v, flx)
-                B2 -= np.dot(v, flx_old) / wnorm
+                # B2 -= np.dot(v, flx_old) / wnorm
+                B2 -= 1. / wnorm
                 flx /= wnorm
+                k, _ = compute_kpairs(xs, B2, adjoint=False, g=gamma)
                 err_B2 = B2_old - B2
                 if abs(B2) > 0:
                     err_B2 /= B2
                 err_flx = max(abs(1 - flx_old / flx))
-                print(("{:>4d} " + 3*"{:13.6}").format(
-                    it, B2, err_B2, err_flx)); input('wait...')
+                print(("{:>4d} " + 4*"{:13.6}").format(
+                    it, k, B2, err_B2, err_flx))
+                if it % 10 == 0: input('wait...')
     else:
         B2, flx = find_B2_spectrum(xs, one_over_k, nb_eigs=nb, g=c)
     return B2, flx
