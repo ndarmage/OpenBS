@@ -172,9 +172,10 @@ def get_T0(xs, B2=0., one_over_k=1.):
     inverse iterations search."""
     st, ss, chi, nsf = xs  # unpack the macroscopic cross sections
     G = st.size
+    # print(('B2 = %g, gamma = ' % B2) +str(gamma(B2, st)))
     T = np.dot(np.diag(st * gamma(B2, st)) - ss[1,:,:],
                get_R(xs, one_over_k))
-    np.fill_diagonal(T, np.full(G, B2 / 3))
+    np.fill_diagonal(T, T.diagonal() + B2 * np.ones(G) / 3)
     return T
 
 
@@ -185,7 +186,7 @@ def get_Tprime(xs, B2=0, one_over_k=1.):
     st = xs[0]
     G = st.size
     Tp = np.dot(np.diag(st * gamma_prime(B2, st)), get_R(xs, one_over_k))
-    np.fill_diagonal(Tp, np.full(G, 1 / 3))
+    np.fill_diagonal(Tp, Tp.diagonal() + np.ones(G) / 3)
     return Tp
 
 
@@ -383,6 +384,16 @@ def find_B2(xs, nb=1, c=coefs, root_finding=False, one_over_k=1.,
             deriv = lambda x, eps=1.e-7: (
                 get_T0(xs, x, one_over_k) - 
                 get_T0(xs, x + eps, one_over_k) ) / eps
+            
+            print("test")
+            print(np.linalg.det(get_T0(xs, 0., one_over_k)))
+            print(np.linalg.det(get_T0(xs, 0.00283, one_over_k)))
+            print(np.linalg.det(get_T0(xs, 0.002833, one_over_k)))
+            print(np.linalg.det(get_T0(xs, 0.00283304, one_over_k)))
+            print(np.linalg.det(get_T0(xs, 0.002834, one_over_k)))
+            print(np.linalg.det(get_T0(xs, 0.00284, one_over_k)))
+            print(np.linalg.det(get_T0(xs, 0.003, one_over_k)))
+            input(np.linalg.det(get_T0(xs, 0.00283304, one_over_k)))
             
             while abs(err_B2) > toll:
                 it += 1
