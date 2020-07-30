@@ -210,19 +210,12 @@ if __name__ == "__main__":
         # plot_eigenspectrum(B2, os.path.join(FigDir, fname))
     
     if find_eigvs_one_by_one:
-        # real_B2_asympts = find_B2_asymptotes(xs, check_asymptotes=True)
-        # print(real_B2_asympts)
-        b2, _ = find_B2(xs, root_finding=True, nb=2)
-        print(' + solution by root finder:\n' + str(b2))
+        nb_eigs = 4  # nb. of wanted eigenvalues
+        b2, B2s = 0., np.zeros(nb_eigs)
+        for i in range(nb_eigs):
+            b2, _ = find_B2(xs, root_finding=True, nb=2,
+                            shift=abs(b2), B2_star=abs(b2))
+            print(' + solution by root finder:\n' + str(b2))
+            B2s[i] = b2
     
-    # np.testing.assert_almost_equal(kinf, 1.1913539017168697, decimal=7,
-        # err_msg="kinf not verified.")
-    # np.testing.assert_allclose(flx_inf, [39.10711218,  5.85183328],
-        # err_msg="fundamental flx_inf not verified.")
-    # adj_kinf, adj_flx_inf = compute_kpairs(xs, adjoint=True)
-    # np.testing.assert_almost_equal(adj_kinf, 1.1913539017168697, decimal=7,
-        # err_msg="adjoint kinf not verified.")
-    # np.testing.assert_allclose(adj_flx_inf, [1.1913539, 1.50878553],
-        # err_msg="fundamental adjoint flx_inf not verified.")
-    # np.testing.assert_almost_equal(find_B2(xs)[0], 0.004184657328394975,
-        # decimal=7, err_msg="B2 not verified.")
+    print(B2s)

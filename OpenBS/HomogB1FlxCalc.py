@@ -341,7 +341,7 @@ def find_B2_asymptotes(xs, cs=coefs, check_asymptotes=True):
 
 
 def find_B2(xs, nb=1, c=coefs, root_finding=False, one_over_k=1.,
-            with_approx=False):
+            with_approx=False, shift=0., B2_star=0.):
     """Find the nb eigenvalues B2 as root of the degenerate system
     equations."""
     if root_finding:
@@ -368,27 +368,18 @@ def find_B2(xs, nb=1, c=coefs, root_finding=False, one_over_k=1.,
             # Inverse iterations to solve the non-linear eigen-problem
             G = xs[0].size  # nb. of groups from st
             toll = 1.e-10
-            flx, B2, it = np.ones(G), 0.002834, 0
+            flx, B2, it = np.ones(G), B2_star, 0
             err_B2 = err_flx = 1.e+20
             v = np.full(G, 1 / np.sum(flx))
             print("{:^5s}{:^13s}{:^13s}{:^13s}{:^13s}".format(
                 'Its.', 'k', 'B2', 'B2-err', 'flx-err'))
-            
-            deriv = lambda x, eps=1.e-6, oOk=one_over_k: (
-                get_T0(xs, x + eps, oOk) - get_T0(xs, x, oOk)
-                                                         ) / eps
-            
-            # print("test")
-            # print(np.linalg.det(get_T0(xs, -0.005, one_over_k)))
-            # print(np.linalg.det(get_T0(xs, 0., one_over_k)))
-            # print(np.linalg.det(get_T0(xs, 0.00283304, one_over_k)))
-            # print(np.linalg.det(get_T0(xs, 0.005, one_over_k)))
-            # print(np.linalg.det(get_T0(xs, 0.01, one_over_k)))
-            # print(np.linalg.det(get_T0(xs, 0.1, one_over_k)))
-            # input(np.linalg.det(get_T0(xs, 0.2, one_over_k)))
-            
+
+            # deriv = lambda x, eps=1.e-6, oOk=one_over_k: (
+                # get_T0(xs, x + eps, oOk) - get_T0(xs, x, oOk)
+                                                         # ) / eps
+           
             k, _ = compute_kpairs(xs, B2, adjoint=False, g=gamma)
-            print(("{:>4d} " + 4*"{:13.6}").format(
+            print(("{:>4d}" + 4*"{:13.6}").format(
                   it, k, B2, err_B2, err_flx))
             
             while abs(err_B2) > toll:
@@ -400,7 +391,7 @@ def find_B2(xs, nb=1, c=coefs, root_finding=False, one_over_k=1.,
                 # print('C', C); print('D', D); input('check')
                 Hprime = get_Tprime(xs, B2_old, one_over_k)
                 flx = np.linalg.solve(
-                    get_T0(xs, B2_old, one_over_k),
+                    get_T0(xs, B2_old, one_over_k) - shift * np.eye(G),
                     np.dot(Hprime, flx_old)
                     )
                 wnorm = np.dot(v, flx)
@@ -412,9 +403,9 @@ def find_B2(xs, nb=1, c=coefs, root_finding=False, one_over_k=1.,
                 if abs(B2) > 0:
                     err_B2 /= B2
                 err_flx = max(abs(1 - flx_old / flx))
-                print(("{:>4d} " + 4*"{:13.6}").format(
+                print(("{:>4d}{:13.6f}" + 3*"{:13.6g}").format(
                     it, k, B2, err_B2, err_flx))
-                if it % 10 == 0: input('wait...')
+                # if it % 10 == 0: input('wait...')
     else:
         B2, flx = find_B2_spectrum(xs, one_over_k, nb_eigs=nb, g=c)
     return B2, flx
