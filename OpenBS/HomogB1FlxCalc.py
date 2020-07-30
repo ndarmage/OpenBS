@@ -87,8 +87,8 @@ def Salpha_prime(B2, S=1.):
         # default criteria for close proximity: rtol=1e-05, atol=1e-08
         -(1 / 3 - 2 / 5 *BoS**2 + 3 / 7 * BoS**4 - 4 / 9 * BoS**6
           + 5 / 11 * BoS**8) / S2, (- a + (
-            (1 / (1 + BoS**2)) if B2 > 0 else
-            (abs((1 - BoS)/(1 + BoS)) * np.sign(1 - BoS) / (1 - BoS)**2)
+            1 / (1 + BoS**2) if B2 > 0 else 1 / (1 - BoS**2)
+       # (abs((1 - BoS)/(1 + BoS)) * np.sign(1 - BoS) / (1 - BoS)**2)
                )) / (2 * B2)
         )
     return ap

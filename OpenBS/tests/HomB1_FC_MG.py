@@ -214,8 +214,10 @@ if __name__ == "__main__":
         b2, B2s = 0., np.zeros(nb_eigs)
         for i in range(nb_eigs):
             b2, _ = find_B2(xs, root_finding=True, nb=2,
-                            shift=abs(b2), B2_star=abs(b2))
+                            shift=b2, B2_star=0.)
             print(' + solution by root finder:\n' + str(b2))
             B2s[i] = b2
-    
-    print(B2s)
+    # [ 2.83304019e-03 -5.55589128e-02  1.18090762e-02 -3.40468457e-01
+    #   1.02851014e+00  3.09664872e+00  9.30827882e+00  2.79558787e+01]
+    # [ 0.00283304 -0.05555891 -0.14154605 -0.6152201 ]
+    print("Eigenvalues:\n" + str(B2s))
