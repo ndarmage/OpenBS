@@ -205,19 +205,20 @@ if __name__ == "__main__":
             # print(find_B2_spectrum(xs, g=coefs[:(i+1)], nb_eigs=1)[0])
             idx = np.isclose(B2[i,:n].imag, 0)
             print('i=%2d, fund. B2 = %g' % (i, B2[i,:n][idx][0]))
+            # print(B2[i,:n][idx])
         # fname = os.path.splitext(os.path.basename(MPOFile))[0] \
               # + '_eigspectrum.pdf'
         # plot_eigenspectrum(B2, os.path.join(FigDir, fname))
     
     if find_eigvs_one_by_one:
-        nb_eigs = 4  # nb. of wanted eigenvalues
+        nb_eigs = 1  # nb. of wanted eigenvalues
         b2, B2s = 0., np.zeros(nb_eigs)
         for i in range(nb_eigs):
-            b2, _ = find_B2(xs, root_finding=True, nb=2,
-                            shift=b2, B2_star=0.)
+            b2, _ = find_B2(xs, root_finding=True, nb=1,
+                            shift=b2, B2_star=b2)
             print(' + solution by root finder:\n' + str(b2))
             B2s[i] = b2
-    # [ 2.83304019e-03 -5.55589128e-02  1.18090762e-02 -3.40468457e-01
-    #   1.02851014e+00  3.09664872e+00  9.30827882e+00  2.79558787e+01]
-    # [ 0.00283304 -0.05555891 -0.14154605 -0.6152201 ]
-    print("Eigenvalues:\n" + str(B2s))
+        # [ 2.83304019e-03 -5.55589128e-02  1.18090762e-02 -3.40468457e-01
+        #   1.02851014e+00  3.09664872e+00  9.30827882e+00  2.79558787e+01]
+        # [ 0.00283304 -0.05555891 -0.14154605 -0.6152201 ]
+        print("Eigenvalues:\n" + str(B2s))

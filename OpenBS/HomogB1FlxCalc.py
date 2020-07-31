@@ -85,13 +85,13 @@ def Salpha_prime(B2, S=1.):
     
     ap = np.where(np.isclose(BoS, 0, atol=1e-5),
         # default criteria for close proximity: rtol=1e-05, atol=1e-08
-        -(1 / 3 - 2 / 5 *BoS**2 + 3 / 7 * BoS**4 - 4 / 9 * BoS**6
-          + 5 / 11 * BoS**8) / S2, (- a + (
+        (1 / 3 - 2 / 5 *BoS**2 + 3 / 7 * BoS**4 - 4 / 9 * BoS**6
+          + 5 / 11 * BoS**8) / S2, (a - (
             1 / (1 + BoS**2) if B2 > 0 else 1 / (1 - BoS**2)
-       # (abs((1 - BoS)/(1 + BoS)) * np.sign(1 - BoS) / (1 - BoS)**2)
+        # (abs((1 - BoS)/(1 + BoS)) * np.sign(1 - BoS) / (1 - BoS)**2)
                )) / (2 * B2)
         )
-    return ap
+    return -ap
 
 
 def beta(B2, S=1.):
@@ -99,13 +99,13 @@ def beta(B2, S=1.):
 
 
 def gamma(B2, S=1.):
-    f = lambda x: alpha(x, S) / beta(x, S) / 3 / x
-    try:
+    f = lambda x: alpha(x, S) / beta(x, S) / S
+    if hasattr(S, '__len__'):
         n = len(S)
-    except:
+    else:
         n = 1
     return np.ones(n) if np.isclose(B2, 0) else \
-        np.where(np.isclose(B2, -S**2), 1 / 3, f(B2))
+        np.where(np.isclose(B2, -S**2), 1, f(B2)) / 3
 
 
 def gamma_prime(B2, S=1.):
@@ -375,8 +375,8 @@ def find_B2(xs, nb=1, c=coefs, root_finding=False, one_over_k=1.,
                 'Its.', 'k', 'B2', 'B2-err', 'flx-err'))
 
             # deriv = lambda x, eps=1.e-6, oOk=one_over_k: (
-                # get_T0(xs, x + eps, oOk) - get_T0(xs, x, oOk)
-                                                         # ) / eps
+            #    get_T0(xs, x + eps, oOk) - get_T0(xs, x, oOk)
+            #                                              ) / eps
            
             k, _ = compute_kpairs(xs, B2, adjoint=False, g=gamma)
             print(("{:>4d}" + 4*"{:13.6}").format(
