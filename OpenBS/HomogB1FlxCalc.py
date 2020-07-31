@@ -99,13 +99,13 @@ def beta(B2, S=1.):
 
 
 def gamma(B2, S=1.):
+    f = lambda x: alpha(x, S) / beta(x, S) / 3 / x
     try:
         n = len(S)
     except:
         n = 1
     return np.ones(n) if np.isclose(B2, 0) else \
-        np.where(np.isclose(B2, -S**2), 1 / 3,
-                     alpha(B2, S) / beta(B2, S) / 3 / S)
+        np.where(np.isclose(B2, -S**2), 1 / 3, f(B2))
 
 
 def gamma_prime(B2, S=1.):
