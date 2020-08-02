@@ -147,6 +147,11 @@ if __name__ == "__main__":
 
     calc_eigenspectrum = True
     find_eigvs_one_by_one = True
+    compare_solution = True
+
+    refflx_fname = os.path.join("output",
+        os.path.splitext(os.path.basename(MPOFile))[0] \
+                 + '_fund_solution.npy')
 
     # verify the implementation
     MPOdata = readMPO(os.path.join(baseDir, "lib", MPOFile),
@@ -191,11 +196,26 @@ if __name__ == "__main__":
         err_msg="kinf not verified by compute_kpairs.")
     
     if calc_eigenspectrum:
+        
+        if os.path.isfile(refflx_fname) and compare_solution:
+            print("Retrieve reference fundamental flux")
+            rB2s, rflxes = np.load(refflx_fname, allow_pickle=True)
+            rB2, rflx = rB2s[0].real, rflxes[:,0].real
+            if np.any(abs(rflxes[:,0].imag) > 0):
+                raise ValueError("wrong fund. flx!")
+            rflx /= np.linalg.norm(rflx)
+            print(" *** DONE ***")
+        
         Nmax = len(coefs)
         print('Max poly degree is %d' % Nmax)
         NmaxG = Nmax * ng
         B2, flx = np.zeros((Nmax, NmaxG), dtype=np.cdouble), \
                   np.zeros((Nmax, ng, NmaxG), dtype=np.cdouble)
+        
+        print((' & '.join(["{:^4s}","{:^16s}","{:^13s}","{:^13s}"])
+             + r' \\ \hline').format(
+             '2N', 'B2', r'$e_B$ (\%)', r'$e_\Phi$ (\%)'))
+        
         for i in range(Nmax):
             # one_over_k=1.
             n = ng * (i + 1)
@@ -204,21 +224,36 @@ if __name__ == "__main__":
             B2[i,:n], flx[i,:,:n] = B2[i,:n][idx], flx[i,:,:n][:,idx]
             # print(find_B2_spectrum(xs, g=coefs[:(i+1)], nb_eigs=1)[0])
             idx = np.isclose(B2[i,:n].imag, 0)
-            print('i=%2d, fund. B2 = %g' % (i, B2[i,:n][idx][0]))
+            fund_B2, fund_flx = B2[i,:n][0].real, flx[i,:,0].real
+            fund_flx /= np.linalg.norm(fund_flx)
+            if np.all(fund_flx < 0):
+                fund_flx *= -1
+            # print(fund_B2, fund_flx)
+            if 'rB2s' in locals():
+                err_B2 = rB2 - fund_B2
+                if abs(rB2) > 0:
+                    err_B2 /= rB2
+                err_flx = 1 - np.dot(rflx, flx[i,:,0].real)
+            print((' & '.join(['{:>4d}','{:^16.12f}'] + 2*['{:^+13.6e}'])
+                  + r' \\').format(
+                2*(i+1), fund_B2, err_B2 * 100, err_flx * 100))
             # print(B2[i,:n][idx])
         # fname = os.path.splitext(os.path.basename(MPOFile))[0] \
               # + '_eigspectrum.pdf'
         # plot_eigenspectrum(B2, os.path.join(FigDir, fname))
+        # print('ref-flx', rflx)
     
     if find_eigvs_one_by_one:
         nb_eigs = 1  # nb. of wanted eigenvalues
-        b2, B2s = 0., np.zeros(nb_eigs)
+        b2, B2s, flx = 0., np.zeros(nb_eigs), np.zeros((ng, nb_eigs),)
         for i in range(nb_eigs):
-            b2, _ = find_B2(xs, root_finding=True, nb=1,
-                            shift=b2, B2_star=b2)
+            b2, flx[:,i] = find_B2(xs, root_finding=True, nb=1,
+                                   shift=b2, B2_star=b2, with_approx=True)
             print(' + solution by root finder:\n' + str(b2))
             B2s[i] = b2
         # [ 2.83304019e-03 -5.55589128e-02  1.18090762e-02 -3.40468457e-01
         #   1.02851014e+00  3.09664872e+00  9.30827882e+00  2.79558787e+01]
         # [ 0.00283304 -0.05555891 -0.14154605 -0.6152201 ]
-        print("Eigenvalues:\n" + str(B2s))
+        np.save(refflx_fname, (B2s, flx), allow_pickle=True)
+        # print(flx[:, 0])
+        print("Eigenvalues by inverse iterations:\n" + str(B2s))

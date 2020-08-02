@@ -83,19 +83,17 @@ def Salpha_prime(B2, S=1.):
     # print('B2', B2, np.isclose(B2, 0, atol=1e-5))
     a = Salpha(B2, S)
     
-    ap = np.where(np.isclose(BoS, 0, atol=1e-5),
+    ap = - np.where(np.isclose(BoS, 0, atol=1e-5),
         # default criteria for close proximity: rtol=1e-05, atol=1e-08
         (1 / 3 - 2 / 5 *BoS**2 + 3 / 7 * BoS**4 - 4 / 9 * BoS**6
-          + 5 / 11 * BoS**8) / S2, (a - (
-            1 / (1 + BoS**2) if B2 > 0 else 1 / (1 - BoS**2)
-        # (abs((1 - BoS)/(1 + BoS)) * np.sign(1 - BoS) / (1 - BoS)**2)
-               )) / (2 * B2)
+          + 5 / 11 * BoS**8) / S2,
+        (a - 1 / (1 + np.sign(B2) * BoS**2)) / (2 * B2)
         )
-    return -ap
+    return ap
 
 
 def beta(B2, S=1.):
-    return (1 - Salpha(B2, S)) / B2
+    return 1 / (3 * S**2) if np.isclose(B2, 0) else (1 - Salpha(B2, S)) / B2
 
 
 def gamma(B2, S=1.):
@@ -105,7 +103,7 @@ def gamma(B2, S=1.):
     else:
         n = 1
     return np.ones(n) if np.isclose(B2, 0) else \
-        np.where(np.isclose(B2, -S**2), 1, f(B2)) / 3
+        np.where(np.isclose(-B2, S**2), 1, f(B2)) / 3
 
 
 def gamma_prime(B2, S=1.):
@@ -273,7 +271,7 @@ def find_B2_spectrum(xs, one_over_k=1., nb_eigs=None, g=coefs,
     # R: removal matrix
     # C: transport matrix
     R = get_R(xs, one_over_k)
-    C = - np.array(ss[1,:,:], copy=True) / 3.
+    C = - ss[1,:,:] / 3.
     np.fill_diagonal(C, st + C.diagonal())
     
     Tm1 = 1. / st
@@ -346,23 +344,25 @@ def find_B2(xs, nb=1, c=coefs, root_finding=False, one_over_k=1.,
     equations."""
     if root_finding:
         if with_approx:
-            B2_asympts = find_B2_asymptotes(xs, c)
+            B2_asympts = find_B2_asymptotes(xs, c, check_asymptotes=False)
             # idx = B2_asympts.argsort() & (B2_asympts < 0)  # sort
             # B2_asympts = B2_asympts[idx]
             # input(B2_asympts)
             infplus = np.finfo(float).max
             k = 1. / one_over_k \
                 if (one_over_k > 0) else infplus
-            flx, B2, eps = None, np.zeros(nb), 1.e-10
+            B2, eps = np.zeros(nb), 1.e-10
+            B2[0], flx = B2_star, None
             idx = abs(B2_asympts).argmin()
             B2l, B2r = B2_asympts[idx] + 1.e-4, 1e+6
             # WARNING: this asymptotes are not the ones of the original
             # problem because of the rational approximation
             for i in range(nb):
-                B2[i] = opt.brentq(compute_deltak, B2l, B2r,
-                                   args=(xs, k, gamma))
+                B2[i], info = opt.brentq(compute_deltak, B2l, B2r,
+                            args=(xs, k, gamma), full_output=True)
                 print('Search segment is [%g, %g], eig nb. %3d = %g' % 
                       (B2l, B2r, i + 1, B2[i]))
+                print(info)
                 B2l, B2r = B2_asympts[i+1] + eps, B2_asympts[i] - eps
         else:
             # Inverse iterations to solve the non-linear eigen-problem
@@ -371,7 +371,9 @@ def find_B2(xs, nb=1, c=coefs, root_finding=False, one_over_k=1.,
             flx, B2, it = np.ones(G), B2_star, 0
             err_B2 = err_flx = 1.e+20
             v = np.full(G, 1 / np.sum(flx))
-            print("{:^5s}{:^13s}{:^13s}{:^13s}{:^13s}".format(
+            print(' +++ ooo +++')
+            print((' & '.join(["{:^4s}"] + 2*["{:^17s}"] + 2*["{:^13s}"])
+                   + r' \\ \hline').format(
                 'Its.', 'k', 'B2', 'B2-err', 'flx-err'))
 
             # deriv = lambda x, eps=1.e-6, oOk=one_over_k: (
@@ -379,7 +381,8 @@ def find_B2(xs, nb=1, c=coefs, root_finding=False, one_over_k=1.,
             #                                              ) / eps
            
             k, _ = compute_kpairs(xs, B2, adjoint=False, g=gamma)
-            print(("{:>4d}" + 4*"{:13.6}").format(
+            print((' & '.join(["{:>4d}"] + 2*["{:^17.13f}"]
+                              + 2*["{:^+13.6e}"]) + r' \\').format(
                   it, k, B2, err_B2, err_flx))
             
             while abs(err_B2) > toll:
@@ -399,12 +402,13 @@ def find_B2(xs, nb=1, c=coefs, root_finding=False, one_over_k=1.,
                 B2 -= 1. / wnorm
                 flx /= wnorm
                 k, _ = compute_kpairs(xs, B2, adjoint=False, g=gamma)
-                err_B2 = B2_old - B2
+                err_B2 = abs(B2 - B2_old)
                 if abs(B2) > 0:
                     err_B2 /= B2
                 err_flx = max(abs(1 - flx_old / flx))
-                print(("{:>4d}{:13.6f}" + 3*"{:13.6g}").format(
-                    it, k, B2, err_B2, err_flx))
+                print((' & '.join(["{:>4d}"] + 2*["{:^17.13f}"]
+                                  + 2*["{:^+13.6e}"]) + r' \\').format(
+                      it, k, B2, err_B2, err_flx))
                 # if it % 10 == 0: input('wait...')
     else:
         B2, flx = find_B2_spectrum(xs, one_over_k, nb_eigs=nb, g=c)
