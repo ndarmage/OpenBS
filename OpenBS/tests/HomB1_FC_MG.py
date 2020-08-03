@@ -139,6 +139,28 @@ def plot_eigenspectrum(B2_array, filename=None):
     plt.close(fig)
 
 
+def plot_k_func_B2(xs, filename=None):
+    b2 = np.linspace(0, 1, 500)
+    b2 = np.append(-b2[::-1][:-1], b2)
+    ks = np.ones(b2.size)
+    for i, v in enumerate(b2):
+        ks[i], _ = compute_kpairs(xs, v, adjoint=False, g=gamma)
+    
+    fig, ax = plt.subplots()
+    ax.plot(b2, ks - 1)
+    ax.plot(b2, np.zeros(b2.size), 'k-', lw=0.5)
+    ax.set_yscale('symlog')
+    # ax.set_ylim(ymin=-5, ymax=5)
+    ax.set_ylabel('$(k-1)$')
+    ax.set_xlabel('$B^2$ (cm$^{-2}$)')
+    if filename is None:
+        plt.show()
+    else:
+        fig.savefig(filename)
+    plt.close(fig)
+    sys.exit(' *** forced stop of execution ***')
+
+
 if __name__ == "__main__":
 
     # calculate equidistant lethargy meshes
@@ -148,6 +170,7 @@ if __name__ == "__main__":
     calc_eigenspectrum = True
     find_eigvs_one_by_one = True
     compare_solution = True
+    make_k_B2_plot = True
 
     refflx_fname = os.path.join("output",
         os.path.splitext(os.path.basename(MPOFile))[0] \
@@ -191,10 +214,15 @@ if __name__ == "__main__":
     print('    ap3 kinf', kinf[p])
     print('    ap3 keff', keff[p])
     
-    # very coarse tolerance k=for unknown reasons of IDT...
-    np.testing.assert_almost_equal(kinfc, kinf[p], decimal=3,
+    np.testing.assert_almost_equal(kinfc, kinf[p], decimal=5,
         err_msg="kinf not verified by compute_kpairs.")
     
+    if make_k_B2_plot:
+        fname = os.path.splitext(os.path.basename(MPOFile))[0] \
+              + '_kB2_plot.pdf'
+        plot_k_func_B2(xs, os.path.join(FigDir, fname))
+
+
     if calc_eigenspectrum:
         
         if os.path.isfile(refflx_fname) and compare_solution:
