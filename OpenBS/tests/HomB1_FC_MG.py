@@ -26,7 +26,7 @@ from analyse_NData import *
 MPOFile = "UO2_325_AFA3G17_tdt_8G.hdf"
 # MPOFile = "UO2_325_AFA3G17_idt_2G_noB2.hdf"
 
-ODir = os.path.join(baseDir, "..", "docs", "NET2020")
+ODir = os.path.join(baseDir, "..", "docs", "JCTT2020_PolyEigProb")
 FigDir = os.path.join(ODir, "figures")
 
 def get_xs_tuple(mxs, p, G=281, L=2, z=0, N=0):
@@ -170,7 +170,7 @@ if __name__ == "__main__":
     calc_eigenspectrum = True
     find_eigvs_one_by_one = True
     compare_solution = True
-    make_k_B2_plot = True
+    make_k_B2_plot = False
 
     refflx_fname = os.path.join("output",
         os.path.splitext(os.path.basename(MPOFile))[0] \
@@ -276,7 +276,7 @@ if __name__ == "__main__":
         b2, B2s, flx = 0., np.zeros(nb_eigs), np.zeros((ng, nb_eigs),)
         for i in range(nb_eigs):
             b2, flx[:,i] = find_B2(xs, root_finding=True, nb=1,
-                                   shift=b2, B2_star=b2, with_approx=True)
+                       shift=b2, B2_star=b2, with_approx=False)
             print(' + solution by root finder:\n' + str(b2))
             B2s[i] = b2
         # [ 2.83304019e-03 -5.55589128e-02  1.18090762e-02 -3.40468457e-01

@@ -15,6 +15,8 @@ from matplotlib import rc
 rc('font',**{'family':'serif', 'sans-serif':['Helvetica'], 'size': 12})
 rc('text', usetex=True)
 
+from HomB1_FC_MG import FigDir
+
 cwd = os.getcwd()
 sys.path.append(os.path.join(cwd, '..'))
 from HomogB1FlxCalc import alpha, gamma, gamma_approx, coefs, \
@@ -47,8 +49,11 @@ def plot_gamma(B2, coefs, filenm):
     # ax.set_yscale('symlog')
     ax.set_ylim(ymax=2)
     # ax.set_xscale('symlog')
-    # plt.show()
-    fig.savefig(filenm)
+    if filenm is None:
+        plt.show()
+    else:
+        fig.savefig(filenm)
+    plt.close(fig)
 
 
 def plot_gamma_prime(B2, coefs, filenm):
@@ -69,8 +74,11 @@ def plot_gamma_prime(B2, coefs, filenm):
     # ax.set_xlabel(r'$\lvert B \rvert / \Sigma$')
     # ax.set_yscale('symlog')
     # ax.set_xscale('symlog')
-    # plt.show()
-    fig.savefig(filenm)
+    if filenm is None:
+        plt.show()
+    else:
+        fig.savefig(filenm)
+    plt.close(fig)
 
 
 if __name__ == "__main__":
@@ -80,9 +88,7 @@ if __name__ == "__main__":
     # set the following expected ranges for B2.     
     B2 = np.logspace(-3, 0, 1000)
     B2 = np.append(np.append(-B2[::-1], [0]), B2)
-    filenm = os.path.join("..", "..", "docs", "NET2020",
-                          "figures", "gamma_poly.pdf")
+    filenm = os.path.join(FigDir, "gamma_poly.pdf")
     plot_gamma(B2, coefs, filenm)
-    filenm = os.path.join("..", "..", "docs", "NET2020",
-                          "figures", "gamma_prime.pdf")
+    filenm = os.path.join(FigDir, "gamma_prime.pdf")
     plot_gamma_prime(B2, coefs, filenm)
