@@ -207,7 +207,7 @@ def compute_flx_derivatives(N, evol_names, Nnot, flx_argvs, eps=1.e-3):
     drho_dN = np.zeros(nb_evolving_nuclides)
     dflx_dN = np.zeros((nb_evolving_nuclides, NG),)
     Delta_N = N * eps
-    eps = 1.0 + eps
+    eps += 1.0
     # attempt to get faster calc
     Ns_copy = np.tile(N, (nb_evolving_nuclides, 1)).T
     Ns_copy[np.arange(nb_evolving_nuclides), \
@@ -218,7 +218,7 @@ def compute_flx_derivatives(N, evol_names, Nnot, flx_argvs, eps=1.e-3):
         # N_copy[j] *= eps
         # get the DataArray
         # NArAll = build_N_DataArray(N_copy, evol_names, Nnot)
-        NArAll = build_N_DataArray(Ns_copy[j,:], evol_names, Nnot)
+        NArAll = build_N_DataArray(Ns_copy[:, j], evol_names, Nnot)
         k, flx = compute_flux(NArAll, *flx_argvs, vrbs=False)
  
         invDNj = 1. / Delta_N[j]
