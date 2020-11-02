@@ -1001,7 +1001,7 @@ plt.show()
 #/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #_________________________________________________________________________________________________________________________________________________________________________________________________________________________________
 #Now we do the case from low power level to full power level for Xe and I
-#The matter here is to retrive the concentrantions after the first transiet [(just if Plin is different from the maxium (100%)] and then to see if Bateman does his job correctly for an abrupt power level change from those new stable concentrantions
+#The matter here is to retrive the concentrantions after the first transiet [just if Plin is different from the maxium (100%)] and then to see if Bateman does his job correctly for an abrupt power level change from those new stable concentrantions
 #NOTE:right before, we started always from the same initial concentrations and we didn't need concentration at new equilibrium point
 
 #retrive concentrations from previous calculations (new equilibrium points)
