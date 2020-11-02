@@ -16,7 +16,7 @@ Firstly we retrive the nuclear data and then we procede with the tests here summ
 
 6)Perturbation analysis on nuclide concentration (few cases)
 
-Note: We have been use of some equilibrium concentration as initial concentrations in test 4,5,6
+Note: We have been used of some equilibrium concentration as initial concentrations in test 4,5,6
 which can be retrived by changing the Pn conditions and Burnup value in previous tests 1,2,3
 (those concentrations are anyway given as input values as already saved)
 
