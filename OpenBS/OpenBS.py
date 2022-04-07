@@ -851,6 +851,7 @@ if __name__ == "__main__":
                     #                  1 + Na_dot_dM_dNj_dot_Ni.diagonal())
 
                     # compute the contribution function for the nuclide at npos
+                    np.seterr(divide = 'ignore', invalid = 'ignore')
                     CF[l,:,i] = Na_hat[l,:,i] * Ni / Nsol.y[l,-1]
 
                     # lg.info("Elapsed time to the l-th hat adjoint (s): %13.6g" %
