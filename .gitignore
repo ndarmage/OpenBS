@@ -1,2 +1,7 @@
 backup
 **/*.pyc
+
+docs/*
+OpenBS/tests/EnergyMeshes.udf
+OpenBS/lib/*CEA*
+OpenBS/lib/*tdt*hdf

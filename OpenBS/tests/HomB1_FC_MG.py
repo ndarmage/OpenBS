@@ -95,8 +95,7 @@ EnMesh_template = """EnergyMesh(   Name: grp%03d_ENE
 """
 
 def equidistant_lethargie_energy_mesh(N, E0=1.1e-10, Emax=19.6403,
-                                      append=True,
-                                      ofile='EnergyMeshes.udf'):
+                                      append=True, ofile='EnergyMeshes.udf'):
     """Print to external file an equidistant lethargy mesh with bounds
     in MeV energy unit between E0 and Emax."""
     u = lambda E: np.log(Emax / E)
@@ -118,20 +117,39 @@ def get_iso_set(mlib):
 
 def plot_eigenspectrum(B2_array, filename=None):
     markers = '12.+x*'  # '.sox+*'
-    fig, ax = plt.subplots()
+    fig, (ax1, ax2) = plt.subplots(nrows=1, ncols=2)
     Nmax, _ = B2_array.shape
+    xmin, xmax = -0.075, 0.0075
     for i, B2 in enumerate(B2_array[::-1]):
         # print(i, B2[:48-8*i])
-        ax.scatter(B2.real, B2.imag, marker=markers[i], c=('C%d' % i),
-                   # facecolors='none', edgecolors=('C%d' % i),
-                   label='N=%d' % (Nmax - i))
+        ax1.scatter(B2.real, B2.imag, marker=markers[i], c=('C%d' % i),
+                    # facecolors='none', edgecolors=('C%d' % i),
+                    label='N=%d' % (Nmax - i))
         # print(B2)
         # print(i, len(B2))
-    ax.set_xlabel('$\Re({B^2})$')
-    ax.set_ylabel('$\Im({B^2})$')
-    ax.set_xscale('symlog')
-    ax.set_yscale('symlog')
-    ax.legend(ncol=3)
+        idx = (xmin <= B2.real) & (B2.real <= xmax)
+        ax2.scatter(B2.real[idx], B2.imag[idx], marker=markers[i],
+                    c=('C%d' % i),
+                    # facecolors='none', edgecolors=('C%d' % i),
+                    label='N=%d' % (Nmax - i))
+    ax1.set_xlabel('$\Re({B^2})$')
+    ax1.set_ylabel('$\Im({B^2})$')
+    ax1.set_xscale('symlog', linthresh=1)
+    ax1.set_yscale('symlog', linthresh=1)
+    ax1.tick_params(axis='x', labelrotation=30)
+    
+    ymin, ymax = ax2.get_ylim()
+    ax2.yaxis.set_label_position("right")
+    ax2.yaxis.tick_right()
+    ax2.plot([0, 0], [ymin, ymax], '--', color='gray', alpha=.5, linewidth=.5)
+    ax2.set_xlim(xmin, xmax)
+    ax2.set_xlabel('$\Re({B^2})$')
+    ax2.tick_params(axis='x', labelrotation=30)
+    # ax2.set_ylabel('$\Im({B^2})$')
+    # ax2.set_xscale('symlog', linthresh=.001)
+    # ax2.set_yscale('symlog')
+    ax2.legend(loc='upper left')
+    fig.tight_layout(w_pad=0)
     if filename is None:
         plt.show()
     else:
@@ -168,7 +186,7 @@ if __name__ == "__main__":
         # equidistant_lethargie_energy_mesh(N)
 
     calc_eigenspectrum = True
-    find_eigvs_one_by_one = True
+    find_eigvs_one_by_one = False
     compare_solution = True
     make_k_B2_plot = False
 
@@ -266,9 +284,9 @@ if __name__ == "__main__":
                   + r' \\').format(
                 2*(i+1), fund_B2, err_B2 * 100, err_flx * 100))
             # print(B2[i,:n][idx])
-        # fname = os.path.splitext(os.path.basename(MPOFile))[0] \
-              # + '_eigspectrum.pdf'
-        # plot_eigenspectrum(B2, os.path.join(FigDir, fname))
+        fname = os.path.splitext(os.path.basename(MPOFile))[0]
+        fname += '_eigspectrum.pdf'
+        plot_eigenspectrum(B2, os.path.join(FigDir, fname))
         # print('ref-flx', rflx)
     
     if find_eigvs_one_by_one:
